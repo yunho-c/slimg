@@ -10,10 +10,15 @@ readme = "README.md"
 keywords = ["image", "optimization", "compression", "webp", "avif"]
 categories = ["multimedia::images", "encoding"]
 
+[features]
+default = ["jpeg-backend-mozjpeg"]
+jpeg-backend-mozjpeg = ["dep:mozjpeg"]
+jpeg-backend-jpegli = []
+
 [dependencies]
 image = { version = "0.25", features = ["avif-native"] }
 libjxl-sys = { version = "0.1", path = "../libjxl-sys", package = "slimg-libjxl-sys" }
-mozjpeg = "0.10"
+mozjpeg = { version = "0.10", optional = true }
 oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
 imgref = "1"
 rapid-qoi = "0.6"
