@@ -1,0 +1,51 @@
+name: JPEG Backends
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cli/Cargo.toml'
+      - 'crates/slimg-core/**'
+      - 'crates/libjxl-sys/**'
+      - 'README.md'
+      - '.github/workflows/jpeg-backends.yml'
+  pull_request:
+    paths:
+      - 'cli/Cargo.toml'
+      - 'crates/slimg-core/**'
+      - 'crates/libjxl-sys/**'
+      - 'README.md'
+      - '.github/workflows/jpeg-backends.yml'
+
+env:
+  SYSTEM_DEPS_DAV1D_BUILD_INTERNAL: always
+
+jobs:
+  verify:
+    name: verify (${{ matrix.backend.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - name: mozjpeg
+            cargo_args: ""
+          - name: jpegli
+            cargo_args: "--no-default-features --features jpeg-backend-jpegli"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y nasm meson ninja-build
+
+      - name: Test slimg-core
+        run: cargo test -p slimg-core ${{ matrix.backend.cargo_args }}
+
+      - name: Build CLI
+        run: cargo build -p slimg ${{ matrix.backend.cargo_args }}
