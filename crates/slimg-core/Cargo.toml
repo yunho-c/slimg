@@ -13,7 +13,7 @@ categories = ["multimedia::images", "encoding"]
 [features]
 default = ["jpeg-backend-mozjpeg"]
 jpeg-backend-mozjpeg = ["dep:mozjpeg"]
-jpeg-backend-jpegli = []
+jpeg-backend-jpegli = ["libjxl-sys/jpegli"]
 
 [dependencies]
 image = { version = "0.25", features = ["avif-native"] }
