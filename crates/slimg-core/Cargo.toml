@@ -32,3 +32,7 @@ harness = false
 [[bench]]
 name = "pipeline_bench"
 harness = false
+
+[[bench]]
+name = "natural_bench"
+harness = false
