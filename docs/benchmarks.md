@@ -92,4 +92,28 @@ cargo bench -p slimg-core -- resize
 ```
 
 HTML reports are generated at `target/criterion/report/index.html`.
+
 Compression metric JSON files are generated at `target/criterion/slimg-metrics/`.
+
+## Natural Image Corpus
+
+There is also a separate benchmark target for real-image workloads based on the Kodak Lossless True Color Image Suite:
+
+```bash
+cargo bench -p slimg-core --bench natural_bench
+```
+
+By default it looks for the corpus at:
+
+```text
+~/GitHub/Kodak-Lossless-True-Color-Image-Suite/PhotoCD_PCD0992
+```
+
+You can override that location with:
+
+```bash
+SLIMG_BENCH_NATURAL_DIR=/path/to/PhotoCD_PCD0992 \
+  cargo bench -p slimg-core --bench natural_bench
+```
+
+`natural_bench` keeps the same benchmark groups (`encode`, `decode`, `convert`, `optimize`, `resize`), but each iteration processes the full Kodak corpus instead of a single synthetic gradient image.
