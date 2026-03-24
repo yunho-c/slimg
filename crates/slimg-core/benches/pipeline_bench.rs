@@ -1,23 +1,15 @@
+mod support;
+
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use slimg_core::codec::{get_codec, EncodeOptions};
+use serde::Serialize;
+use slimg_core::codec::{EncodeOptions, get_codec};
 use slimg_core::resize::resize;
-use slimg_core::{convert, optimize, Format, ImageData, PipelineOptions, ResizeMode};
+use slimg_core::{Format, ImageData, PipelineOptions, ResizeMode, convert, optimize};
 
-const BENCH_IMAGE_SIZE: u32 = 512;
-
-fn generate_test_image(width: u32, height: u32) -> ImageData {
-    let mut data = vec![0u8; (width * height * 4) as usize];
-    for y in 0..height {
-        for x in 0..width {
-            let i = ((y * width + x) * 4) as usize;
-            data[i] = (x * 255 / width) as u8;
-            data[i + 1] = (y * 255 / height) as u8;
-            data[i + 2] = 128;
-            data[i + 3] = 255;
-        }
-    }
-    ImageData::new(width, height, data)
-}
+use support::{
+    BENCH_QUALITY, SizeChangeRow, benchmark_fixture, fixture_info, print_size_change_table,
+    size_change_metrics, write_json_report,
+};
 
 /// Pre-encode a test image in the given format and return the encoded bytes.
 fn pre_encode(image: &ImageData, format: Format, quality: u8) -> Vec<u8> {
@@ -26,38 +18,68 @@ fn pre_encode(image: &ImageData, format: Format, quality: u8) -> Vec<u8> {
     codec.encode(image, &options).unwrap()
 }
 
-fn bench_convert(c: &mut Criterion) {
-    let image = generate_test_image(BENCH_IMAGE_SIZE, BENCH_IMAGE_SIZE);
+#[derive(Debug)]
+struct ConvertCase {
+    label: &'static str,
+    decoded: ImageData,
+    options: PipelineOptions,
+    metrics: support::SizeChangeMetrics,
+}
 
-    let conversions: Vec<(&str, Format, Format)> = vec![
-        ("jpeg_to_webp", Format::Jpeg, Format::WebP),
-        ("png_to_jpeg", Format::Png, Format::Jpeg),
-        ("webp_to_png", Format::WebP, Format::Png),
-        ("png_to_avif", Format::Png, Format::Avif),
-    ];
+#[derive(Debug)]
+struct OptimizeCase {
+    label: &'static str,
+    input_bytes: Vec<u8>,
+    metrics: support::SizeChangeMetrics,
+}
 
-    let pixel_count = (BENCH_IMAGE_SIZE as u64) * (BENCH_IMAGE_SIZE as u64);
+#[derive(Debug, Serialize)]
+struct PipelineMetricsReport {
+    fixture: support::FixtureInfo,
+    convert: Vec<SizeChangeRow>,
+    optimize: Vec<SizeChangeRow>,
+}
+
+fn bench_pipeline(c: &mut Criterion) {
+    let image = benchmark_fixture();
+    let fixture = fixture_info(&image).expect("fixture metrics should be valid");
+    let pixel_count = u64::from(fixture.width) * u64::from(fixture.height);
+    let convert_cases = build_convert_cases(&image);
+    let optimize_cases = build_optimize_cases(&image);
+    let convert_rows = convert_cases
+        .iter()
+        .map(|case| SizeChangeRow {
+            label: case.label.to_string(),
+            metrics: case.metrics,
+        })
+        .collect::<Vec<_>>();
+    let optimize_rows = optimize_cases
+        .iter()
+        .map(|case| SizeChangeRow {
+            label: case.label.to_string(),
+            metrics: case.metrics,
+        })
+        .collect::<Vec<_>>();
+
+    print_size_change_table("Pipeline convert compression metrics", &fixture, &convert_rows);
+    print_size_change_table("Pipeline optimize compression metrics", &fixture, &optimize_rows);
+    write_json_report(
+        "pipeline",
+        &PipelineMetricsReport {
+            fixture: fixture.clone(),
+            convert: convert_rows,
+            optimize: optimize_rows,
+        },
+    )
+    .expect("pipeline metrics JSON should be written");
+
     let mut group = c.benchmark_group("convert");
     group.throughput(Throughput::Elements(pixel_count));
 
-    for (name, src_format, dst_format) in &conversions {
-        // Pre-encode the test image in the source format, then decode it.
-        let encoded = pre_encode(&image, *src_format, 80);
-        let codec = get_codec(*src_format);
-        let decoded = codec.decode(&encoded).unwrap();
-
-        let options = PipelineOptions {
-            format: *dst_format,
-            quality: 80,
-            resize: None,
-            crop: None,
-            extend: None,
-            fill_color: None,
-        };
-
+    for case in &convert_cases {
         group.bench_with_input(
-            BenchmarkId::from_parameter(name),
-            &(&decoded, &options),
+            BenchmarkId::from_parameter(case.label),
+            &(&case.decoded, &case.options),
             |b, &(image, opts)| {
                 b.iter(|| convert(image, opts).unwrap());
             },
@@ -65,38 +87,21 @@ fn bench_convert(c: &mut Criterion) {
     }
 
     group.finish();
-}
-
-fn bench_optimize(c: &mut Criterion) {
-    let image = generate_test_image(BENCH_IMAGE_SIZE, BENCH_IMAGE_SIZE);
-
-    let formats = vec![
-        ("Jpeg", Format::Jpeg),
-        ("Png", Format::Png),
-        ("WebP", Format::WebP),
-        ("Avif", Format::Avif),
-    ];
 
     let mut group = c.benchmark_group("optimize");
 
-    for (name, format) in &formats {
-        let encoded = pre_encode(&image, *format, 90);
-
-        group.throughput(Throughput::Bytes(encoded.len() as u64));
+    for case in &optimize_cases {
+        group.throughput(Throughput::Bytes(case.input_bytes.len() as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(name),
-            &encoded,
+            BenchmarkId::from_parameter(case.label),
+            &case.input_bytes,
             |b, data| {
-                b.iter(|| optimize(data, 80).unwrap());
+                b.iter(|| optimize(data, BENCH_QUALITY).unwrap());
             },
         );
     }
 
     group.finish();
-}
-
-fn bench_resize(c: &mut Criterion) {
-    let image = generate_test_image(BENCH_IMAGE_SIZE, BENCH_IMAGE_SIZE);
 
     let modes: Vec<(&str, ResizeMode)> = vec![
         ("width_256", ResizeMode::Width(256)),
@@ -106,7 +111,6 @@ fn bench_resize(c: &mut Criterion) {
         ("fit_256x256", ResizeMode::Fit(256, 256)),
     ];
 
-    let pixel_count = (BENCH_IMAGE_SIZE as u64) * (BENCH_IMAGE_SIZE as u64);
     let mut group = c.benchmark_group("resize");
     group.throughput(Throughput::Elements(pixel_count));
 
@@ -123,5 +127,71 @@ fn bench_resize(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_convert, bench_optimize, bench_resize);
+fn build_convert_cases(image: &ImageData) -> Vec<ConvertCase> {
+    let conversions: Vec<(&str, Format, Format)> = vec![
+        ("jpeg_to_webp", Format::Jpeg, Format::WebP),
+        ("png_to_jpeg", Format::Png, Format::Jpeg),
+        ("webp_to_png", Format::WebP, Format::Png),
+        ("png_to_avif", Format::Png, Format::Avif),
+    ];
+
+    conversions
+        .into_iter()
+        .map(|(label, src_format, dst_format)| {
+            let input_bytes = pre_encode(image, src_format, BENCH_QUALITY);
+            let decoded = get_codec(src_format)
+                .decode(&input_bytes)
+                .expect("sample decode should succeed");
+            let options = PipelineOptions {
+                format: dst_format,
+                quality: BENCH_QUALITY,
+                resize: None,
+                crop: None,
+                extend: None,
+                fill_color: None,
+            };
+            let output_bytes = convert(&decoded, &options)
+                .expect("sample convert should succeed")
+                .data;
+            let metrics = size_change_metrics(input_bytes.len(), output_bytes.len())
+                .expect("size change metrics should be valid");
+
+            ConvertCase {
+                label,
+                decoded,
+                options,
+                metrics,
+            }
+        })
+        .collect()
+}
+
+fn build_optimize_cases(image: &ImageData) -> Vec<OptimizeCase> {
+    let formats = vec![
+        ("Jpeg", Format::Jpeg),
+        ("Png", Format::Png),
+        ("WebP", Format::WebP),
+        ("Avif", Format::Avif),
+    ];
+
+    formats
+        .into_iter()
+        .map(|(label, format)| {
+            let input_bytes = pre_encode(image, format, 90);
+            let output_bytes = optimize(&input_bytes, BENCH_QUALITY)
+                .expect("sample optimize should succeed")
+                .data;
+            let metrics = size_change_metrics(input_bytes.len(), output_bytes.len())
+                .expect("size change metrics should be valid");
+
+            OptimizeCase {
+                label,
+                input_bytes,
+                metrics,
+            }
+        })
+        .collect()
+}
+
+criterion_group!(benches, bench_pipeline);
 criterion_main!(benches);
