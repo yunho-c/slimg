@@ -32,13 +32,33 @@ build-cli-jpegli: submodules
 bench:
     SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core
 
+# Run all slimg-core Criterion benchmarks with the jpegli backend.
+bench-jpegli: submodules
+    SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core --no-default-features --features jpeg-backend-jpegli
+
 # Run only the codec benchmark target.
 bench-codec:
     SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core --bench codec_bench
 
+# Run only the codec benchmark target with the jpegli backend.
+bench-codec-jpegli: submodules
+    SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core --bench codec_bench --no-default-features --features jpeg-backend-jpegli
+
 # Run only the pipeline benchmark target.
 bench-pipeline:
     SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core --bench pipeline_bench
+
+# Run only the pipeline benchmark target with the jpegli backend.
+bench-pipeline-jpegli: submodules
+    SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core --bench pipeline_bench --no-default-features --features jpeg-backend-jpegli
+
+# Run only the natural-image benchmark target.
+bench-natural:
+    SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core --bench natural_bench
+
+# Run only the natural-image benchmark target with the jpegli backend.
+bench-natural-jpegli: submodules
+    SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core --bench natural_bench --no-default-features --features jpeg-backend-jpegli
 
 # Build and run Python binding tests.
 test-python: submodules
