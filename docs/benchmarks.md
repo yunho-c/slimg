@@ -5,6 +5,8 @@ Performance measurements on 512x512 gradient test images using [criterion](https
 > Environment: Apple M-series, macOS, Rust release profile with thin LTO.
 > Results will vary by hardware. Run `cargo bench -p slimg-core` to measure on your machine.
 
+Compression metrics are reported for the same deterministic 512x512 gradient fixture and are fixture-specific. They are intended to complement timing data, not replace it.
+
 ## Codec Performance
 
 ### Encode (512x512, quality 80)
@@ -16,6 +18,24 @@ Performance measurements on 512x512 gradient test images using [criterion](https
 | WebP | 9.3 ms | 28 Mpx/s |
 | AVIF | 29 ms | 9 Mpx/s |
 | PNG | 45 ms | 5.8 Mpx/s |
+
+## Compression Metrics
+
+The benchmark binaries now emit compact compression tables to stdout and write JSON sidecars to `target/criterion/slimg-metrics/`.
+
+- `codec.json` reports raw-image-to-encoded metrics for codec encode/decode fixtures.
+- `pipeline.json` reports encoded-input-to-encoded-output metrics for convert and optimize cases.
+- Resize benchmarks remain timing-only.
+
+Formulas:
+
+- `raw_bytes = width * height * 4`
+- `encoded_bytes = output.len()`
+- `bytes_per_pixel = encoded_bytes / (width * height)`
+- `compression_ratio = raw_bytes / encoded_bytes`
+- `space_saving_pct = 100 * (1 - encoded_bytes / raw_bytes)`
+- `size_change_pct = 100 * (output_bytes / input_bytes - 1)`
+- `output_to_input_ratio = output_bytes / input_bytes`
 
 ### Decode
 
@@ -72,3 +92,36 @@ cargo bench -p slimg-core -- resize
 ```
 
 HTML reports are generated at `target/criterion/report/index.html`.
+
+Compression metric JSON files are generated at `target/criterion/slimg-metrics/`.
+
+## Natural Image Corpus
+
+There is also a separate benchmark target for real-image storage/compression workloads based on the Kodak Lossless True Color Image Suite:
+
+```bash
+cargo bench -p slimg-core --bench natural_bench
+```
+
+By default it looks for the corpus at:
+
+```text
+~/GitHub/Kodak-Lossless-True-Color-Image-Suite/PhotoCD_PCD0992
+```
+
+You can override that location with:
+
+```bash
+SLIMG_BENCH_NATURAL_DIR=/path/to/PhotoCD_PCD0992 \
+  cargo bench -p slimg-core --bench natural_bench
+```
+
+`natural_bench` benchmarks:
+
+- `encode` with corpus-level compression metrics
+- `convert` with corpus-level input/output size change metrics
+- `optimize` with corpus-level input/output size change metrics
+
+It intentionally does not benchmark `decode` or `resize`, so it stays focused on real-image storage efficiency rather than general runtime coverage.
+
+Like the synthetic metric benches, it writes a JSON sidecar under `target/criterion/slimg-metrics/` as `natural.json`.
