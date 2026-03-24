@@ -15,7 +15,7 @@ A fast image optimization tool. Convert, compress, resize, crop, and extend imag
 
 | Format | Decode | Encode | Notes |
 |--------|--------|--------|-------|
-| JPEG   | Yes    | Yes    | MozJPEG encoder for superior compression |
+| JPEG   | Yes    | Yes    | MozJPEG by default; optional experimental `jpegli` backend for source builds |
 | PNG    | Yes    | Yes    | OxiPNG optimizer with Zopfli compression |
 | WebP   | Yes    | Yes    | Lossy encoding via libwebp |
 | AVIF   | Yes    | Yes    | ravif encoder; dav1d decoder (statically linked) |
@@ -55,6 +55,15 @@ git clone https://github.com/clroot/slimg.git
 cd slimg
 cargo install --path cli
 ```
+
+To build with the experimental `jpegli` JPEG backend instead of the default `mozjpeg` backend:
+
+```bash
+git submodule update --init --recursive
+cargo install --path cli --no-default-features --features jpeg-backend-jpegli
+```
+
+The `jpegli` backend currently requires the vendored `libjxl` source tree and is not supported through the prebuilt `slimg-libjxl-sys` archive path.
 
 #### Build requirements
 

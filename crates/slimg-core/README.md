@@ -6,12 +6,29 @@ Image optimization library for Rust. Decode, encode, convert, and resize images 
 
 | Format | Decode | Encode | Encoder |
 |--------|--------|--------|---------|
-| JPEG | Yes | Yes | MozJPEG |
+| JPEG | Yes | Yes | MozJPEG by default; optional `jpeg-backend-jpegli` feature |
 | PNG | Yes | Yes | OxiPNG (Zopfli) |
 | WebP | Yes | Yes | libwebp |
 | AVIF | macOS only | Yes | ravif (AV1) |
 | QOI | Yes | Yes | rapid-qoi |
-| JPEG XL | Yes | No | Decode only (GPL restriction) |
+| JPEG XL | Yes | Yes | libjxl |
+
+## JPEG Backends
+
+`slimg-core` uses `mozjpeg` by default:
+
+```bash
+cargo test -p slimg-core
+```
+
+To test or build the experimental `jpegli` backend, disable default features and enable `jpeg-backend-jpegli`:
+
+```bash
+git submodule update --init --recursive
+cargo test -p slimg-core --no-default-features --features jpeg-backend-jpegli
+```
+
+The `jpegli` backend currently requires the vendored `libjxl` source tree and is not supported through the prebuilt `slimg-libjxl-sys` archive path.
 
 ## Usage
 
