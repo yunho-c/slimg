@@ -97,7 +97,7 @@ Compression metric JSON files are generated at `target/criterion/slimg-metrics/`
 
 ## Natural Image Corpus
 
-There is also a separate benchmark target for real-image workloads based on the Kodak Lossless True Color Image Suite:
+There is also a separate benchmark target for real-image storage/compression workloads based on the Kodak Lossless True Color Image Suite:
 
 ```bash
 cargo bench -p slimg-core --bench natural_bench
@@ -116,4 +116,12 @@ SLIMG_BENCH_NATURAL_DIR=/path/to/PhotoCD_PCD0992 \
   cargo bench -p slimg-core --bench natural_bench
 ```
 
-`natural_bench` keeps the same benchmark groups (`encode`, `decode`, `convert`, `optimize`, `resize`), but each iteration processes the full Kodak corpus instead of a single synthetic gradient image.
+`natural_bench` benchmarks:
+
+- `encode` with corpus-level compression metrics
+- `convert` with corpus-level input/output size change metrics
+- `optimize` with corpus-level input/output size change metrics
+
+It intentionally does not benchmark `decode` or `resize`, so it stays focused on real-image storage efficiency rather than general runtime coverage.
+
+Like the synthetic metric benches, it writes a JSON sidecar under `target/criterion/slimg-metrics/` as `natural.json`.
