@@ -125,3 +125,35 @@ SLIMG_BENCH_NATURAL_DIR=/path/to/PhotoCD_PCD0992 \
 It intentionally does not benchmark `decode` or `resize`, so it stays focused on real-image storage efficiency rather than general runtime coverage.
 
 Like the synthetic metric benches, it writes a JSON sidecar under `target/criterion/slimg-metrics/` as `natural.json`.
+
+### Natural Resolution Sweep
+
+There is also a standalone analysis target that resizes the natural-image corpus to a set of common max dimensions, encodes the whole corpus with each codec, and writes both a JSON report and an SVG line chart:
+
+```bash
+cargo run --release -p slimg-core --example natural_resolution_sweep
+```
+
+Or via `just`:
+
+```bash
+just bench-natural-sweep
+```
+
+Outputs:
+
+- `target/criterion/slimg-metrics/natural_resolution_sweep.json`
+- `target/criterion/slimg-metrics/natural_resolution_sweep.svg`
+
+Defaults:
+
+- max dimensions: `128,256,384,512,640,768`
+- quality: `80`
+- repeats per point: `3`
+
+Optional environment variables:
+
+- `SLIMG_BENCH_NATURAL_DIR=/path/to/PhotoCD_PCD0992`
+- `SLIMG_SWEEP_MAX_DIMS=128,256,512,768`
+- `SLIMG_SWEEP_QUALITY=80`
+- `SLIMG_SWEEP_REPEATS=5`

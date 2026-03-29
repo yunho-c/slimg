@@ -92,6 +92,14 @@ bench-natural-jpegli: submodules
 bench-natural-fast-jpegli: submodules
     SLIMG_BENCH_QUICK=1 SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo bench -p slimg-core --bench natural_bench --no-default-features --features jpeg-backend-jpegli
 
+# Sweep natural-image corpus resolutions and plot per-codec encode throughput.
+bench-natural-sweep:
+    SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo run --release -p slimg-core --example natural_resolution_sweep
+
+# Sweep natural-image corpus resolutions with the jpegli backend and plot per-codec encode throughput.
+bench-natural-sweep-jpegli: submodules
+    SYSTEM_DEPS_DAV1D_BUILD_INTERNAL=always cargo run --release -p slimg-core --example natural_resolution_sweep --no-default-features --features jpeg-backend-jpegli
+
 # Build and run Python binding tests.
 test-python: submodules
     cd bindings/python && python -m pip install maturin pytest && maturin build --out dist && python -m pip install dist/*.whl && pytest tests -v
