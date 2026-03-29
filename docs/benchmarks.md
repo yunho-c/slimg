@@ -140,6 +140,17 @@ Or via `just`:
 just bench-natural-sweep
 ```
 
+The sweep includes:
+
+- `JPEG`
+- `JXL`
+- `WebP`
+- `AVIF`
+- `PNG`
+- `QOI`
+
+If you run `just bench-natural-sweep-jpegli`, the `JPEG` curve uses the `jpegli` JPEG backend, while `JXL` remains actual JPEG XL.
+
 Outputs:
 
 - `target/criterion/slimg-metrics/natural_resolution_sweep.json`

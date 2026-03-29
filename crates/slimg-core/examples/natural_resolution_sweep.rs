@@ -364,14 +364,22 @@ fn write_svg_chart(path: &Path, report: &SweepReport) -> io::Result<()> {
         fs::create_dir_all(parent)?;
     }
 
-    let x_min = report.max_dims.iter().copied().min().unwrap_or(1);
-    let x_max = report.max_dims.iter().copied().max().unwrap_or(1);
-    let max_y = report
+    let x_min = report.max_dims.iter().copied().min().unwrap_or(1) as f64;
+    let x_max = report.max_dims.iter().copied().max().unwrap_or(1) as f64;
+    let y_values = report
         .series
         .iter()
         .flat_map(|series| series.points.iter().map(|point| point.throughput_mpx_s))
-        .fold(0.0_f64, f64::max)
-        .max(1.0);
+        .filter(|value| *value > 0.0)
+        .collect::<Vec<_>>();
+    let min_y = y_values.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_y = y_values.iter().copied().fold(0.0_f64, f64::max);
+    let min_y = if min_y.is_finite() {
+        min_y * 0.85
+    } else {
+        1e-3
+    };
+    let max_y = if max_y > 0.0 { max_y * 1.15 } else { 1.0 };
 
     let root = SVGBackend::new(path, (1280, 720)).into_drawing_area();
     root.fill(&WHITE).map_err(plotters_err)?;
@@ -387,13 +395,13 @@ fn write_svg_chart(path: &Path, report: &SweepReport) -> io::Result<()> {
         .margin(20)
         .x_label_area_size(50)
         .y_label_area_size(70)
-        .build_cartesian_2d(x_min..(x_max + 1), 0.0_f64..(max_y * 1.15))
+        .build_cartesian_2d((x_min..x_max).log_scale(), (min_y..max_y).log_scale())
         .map_err(plotters_err)?;
 
     chart
         .configure_mesh()
-        .x_desc("Max dimension (images resized with Fit(max_dim, max_dim))")
-        .y_desc("Encode throughput (MPx/s)")
+        .x_desc("Max dimension (log scale)")
+        .y_desc("Encode throughput (MPx/s, log scale)")
         .draw()
         .map_err(plotters_err)?;
 
@@ -404,7 +412,8 @@ fn write_svg_chart(path: &Path, report: &SweepReport) -> io::Result<()> {
         let line_points = series
             .points
             .iter()
-            .map(|point| (point.max_dim, point.throughput_mpx_s))
+            .filter(|point| point.throughput_mpx_s > 0.0)
+            .map(|point| (point.max_dim as f64, point.throughput_mpx_s))
             .collect::<Vec<_>>();
 
         chart
@@ -469,6 +478,7 @@ fn target_dir() -> PathBuf {
 fn encodable_formats() -> Vec<Format> {
     vec![
         Format::Jpeg,
+        Format::Jxl,
         Format::WebP,
         Format::Avif,
         Format::Png,
