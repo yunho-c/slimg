@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_main};
 use serde::Serialize;
 use slimg_core::codec::{EncodeOptions, get_codec};
 use slimg_core::{Format, ImageData, PipelineOptions, convert, decode_file, optimize};
@@ -488,5 +488,5 @@ fn format_label(format: Format) -> &'static str {
     }
 }
 
-criterion_group!(benches, bench_natural);
+support::slimg_criterion_group!(benches, bench_natural);
 criterion_main!(benches);

@@ -5,13 +5,34 @@ use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::PathBuf;
+use std::time::Duration;
 
+use criterion::Criterion;
 use serde::Serialize;
 use slimg_core::ImageData;
 
 pub const BENCH_IMAGE_SIZE: u32 = 512;
 pub const BENCH_QUALITY: u8 = 80;
 pub const FIXTURE_NAME: &str = "512x512 gradient RGBA";
+const QUICK_SAMPLE_SIZE: usize = 10;
+const QUICK_MEASUREMENT_SECS: u64 = 5;
+const QUICK_WARMUP_SECS: u64 = 1;
+const QUICK_MODE_ENV: &str = "SLIMG_BENCH_QUICK";
+const SAMPLE_SIZE_ENV: &str = "SLIMG_BENCH_SAMPLE_SIZE";
+const MEASUREMENT_SECS_ENV: &str = "SLIMG_BENCH_MEASUREMENT_SECONDS";
+const WARMUP_SECS_ENV: &str = "SLIMG_BENCH_WARMUP_SECONDS";
+
+macro_rules! slimg_criterion_group {
+    ($name:ident, $($target:path),+ $(,)?) => {
+        criterion::criterion_group! {
+            name = $name;
+            config = $crate::support::benchmark_config();
+            targets = $($target),+
+        }
+    };
+}
+
+pub(crate) use slimg_criterion_group;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct FixtureInfo {
@@ -72,6 +93,10 @@ impl fmt::Display for MetricsError {
 }
 
 impl std::error::Error for MetricsError {}
+
+pub fn benchmark_config() -> Criterion {
+    configured_benchmark(Criterion::default()).configure_from_args()
+}
 
 pub fn benchmark_fixture() -> ImageData {
     generate_test_image(BENCH_IMAGE_SIZE, BENCH_IMAGE_SIZE)
@@ -187,6 +212,31 @@ fn generate_test_image(width: u32, height: u32) -> ImageData {
     ImageData::new(width, height, data)
 }
 
+fn configured_benchmark(mut criterion: Criterion) -> Criterion {
+    let quick_mode = env_flag(QUICK_MODE_ENV);
+
+    if quick_mode {
+        criterion = criterion
+            .sample_size(QUICK_SAMPLE_SIZE)
+            .measurement_time(Duration::from_secs(QUICK_MEASUREMENT_SECS))
+            .warm_up_time(Duration::from_secs(QUICK_WARMUP_SECS));
+    }
+
+    if let Some(sample_size) = env_usize(SAMPLE_SIZE_ENV) {
+        criterion = criterion.sample_size(sample_size);
+    }
+
+    if let Some(seconds) = env_u64(MEASUREMENT_SECS_ENV) {
+        criterion = criterion.measurement_time(Duration::from_secs(seconds));
+    }
+
+    if let Some(seconds) = env_u64(WARMUP_SECS_ENV) {
+        criterion = criterion.warm_up_time(Duration::from_secs(seconds));
+    }
+
+    criterion
+}
+
 fn pixel_count(width: u32, height: u32) -> Result<u64, MetricsError> {
     let pixels = u64::from(width)
         .checked_mul(u64::from(height))
@@ -226,4 +276,19 @@ fn print_header(first_column: &str, columns: &[&str]) {
         first_column, columns[0], columns[1], columns[2], columns[3]
     );
     println!("{}", "-".repeat(70));
+}
+
+fn env_flag(name: &str) -> bool {
+    matches!(
+        env::var(name).ok().as_deref(),
+        Some("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+    )
+}
+
+fn env_usize(name: &str) -> Option<usize> {
+    env::var(name).ok()?.parse().ok()
+}
+
+fn env_u64(name: &str) -> Option<u64> {
+    env::var(name).ok()?.parse().ok()
 }
