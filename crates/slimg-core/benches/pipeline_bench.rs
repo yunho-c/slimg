@@ -1,6 +1,6 @@
 mod support;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_main};
 use serde::Serialize;
 use slimg_core::codec::{EncodeOptions, get_codec};
 use slimg_core::resize::resize;
@@ -193,5 +193,5 @@ fn build_optimize_cases(image: &ImageData) -> Vec<OptimizeCase> {
         .collect()
 }
 
-criterion_group!(benches, bench_pipeline);
+support::slimg_criterion_group!(benches, bench_pipeline);
 criterion_main!(benches);

@@ -1,6 +1,6 @@
 mod support;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_main};
 use serde::Serialize;
 use slimg_core::{EncodeOptions, Format, codec::get_codec};
 
@@ -127,5 +127,5 @@ fn format_label(format: Format) -> &'static str {
     }
 }
 
-criterion_group!(benches, bench_codec);
+support::slimg_criterion_group!(benches, bench_codec);
 criterion_main!(benches);
