@@ -14,7 +14,10 @@ use support::{
 /// Pre-encode a test image in the given format and return the encoded bytes.
 fn pre_encode(image: &ImageData, format: Format, quality: u8) -> Vec<u8> {
     let codec = get_codec(format);
-    let options = EncodeOptions { quality };
+    let options = EncodeOptions {
+        quality,
+        threads: None,
+    };
     codec.encode(image, &options).unwrap()
 }
 
@@ -61,8 +64,16 @@ fn bench_pipeline(c: &mut Criterion) {
         })
         .collect::<Vec<_>>();
 
-    print_size_change_table("Pipeline convert compression metrics", &fixture, &convert_rows);
-    print_size_change_table("Pipeline optimize compression metrics", &fixture, &optimize_rows);
+    print_size_change_table(
+        "Pipeline convert compression metrics",
+        &fixture,
+        &convert_rows,
+    );
+    print_size_change_table(
+        "Pipeline optimize compression metrics",
+        &fixture,
+        &optimize_rows,
+    );
     write_json_report(
         "pipeline",
         &PipelineMetricsReport {
@@ -145,6 +156,7 @@ fn build_convert_cases(image: &ImageData) -> Vec<ConvertCase> {
             let options = PipelineOptions {
                 format: dst_format,
                 quality: BENCH_QUALITY,
+                threads: None,
                 resize: None,
                 crop: None,
                 extend: None,

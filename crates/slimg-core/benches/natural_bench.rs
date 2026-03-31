@@ -16,7 +16,8 @@ use support::{
 const NATURAL_BENCH_QUALITY: u8 = 80;
 const NATURAL_OPTIMIZE_INPUT_QUALITY: u8 = 90;
 const NATURAL_BENCH_ENV: &str = "SLIMG_BENCH_NATURAL_DIR";
-const NATURAL_BENCH_DEFAULT_REPO: &str = "GitHub/Kodak-Lossless-True-Color-Image-Suite/PhotoCD_PCD0992";
+const NATURAL_BENCH_DEFAULT_REPO: &str =
+    "GitHub/Kodak-Lossless-True-Color-Image-Suite/PhotoCD_PCD0992";
 
 #[derive(Debug, Clone)]
 struct NaturalImage {
@@ -113,7 +114,11 @@ fn bench_natural(c: &mut Criterion) {
 
     print_natural_compression_table(&corpus.info, &encode_rows);
     print_natural_size_change_table("Natural convert size metrics", &corpus.info, &convert_rows);
-    print_natural_size_change_table("Natural optimize size metrics", &corpus.info, &optimize_rows);
+    print_natural_size_change_table(
+        "Natural optimize size metrics",
+        &corpus.info,
+        &optimize_rows,
+    );
     write_json_report(
         "natural",
         &NaturalMetricsReport {
@@ -135,6 +140,7 @@ fn bench_natural(c: &mut Criterion) {
 fn bench_encode_natural(c: &mut Criterion, corpus: &NaturalCorpus, encode_cases: &[EncodeCase]) {
     let options = EncodeOptions {
         quality: NATURAL_BENCH_QUALITY,
+        threads: None,
     };
     let mut group = c.benchmark_group("encode");
     group.throughput(Throughput::Elements(corpus.info.total_pixels));
@@ -207,7 +213,18 @@ fn build_encode_cases(corpus: &NaturalCorpus) -> Vec<EncodeCase> {
             let total_encoded_bytes = corpus
                 .images
                 .iter()
-                .map(|image| codec.encode(&image.image, &EncodeOptions { quality: NATURAL_BENCH_QUALITY }).unwrap().len() as u64)
+                .map(|image| {
+                    codec
+                        .encode(
+                            &image.image,
+                            &EncodeOptions {
+                                quality: NATURAL_BENCH_QUALITY,
+                                threads: None,
+                            },
+                        )
+                        .unwrap()
+                        .len() as u64
+                })
                 .sum::<u64>();
             let metrics = aggregate_compression_metrics(&corpus.info, total_encoded_bytes);
 
@@ -245,6 +262,7 @@ fn build_convert_cases(corpus: &NaturalCorpus) -> Vec<ConvertCase> {
                         &PipelineOptions {
                             format: dst_format,
                             quality: NATURAL_BENCH_QUALITY,
+                            threads: None,
                             resize: None,
                             crop: None,
                             extend: None,
@@ -260,6 +278,7 @@ fn build_convert_cases(corpus: &NaturalCorpus) -> Vec<ConvertCase> {
             let options = PipelineOptions {
                 format: dst_format,
                 quality: NATURAL_BENCH_QUALITY,
+                threads: None,
                 resize: None,
                 crop: None,
                 extend: None,
@@ -352,9 +371,16 @@ fn load_natural_corpus() -> Option<NaturalCorpus> {
         .iter()
         .map(|path| {
             let (image, format) = decode_file(path).unwrap_or_else(|err| {
-                panic!("failed to decode natural benchmark image {}: {err}", path.display())
+                panic!(
+                    "failed to decode natural benchmark image {}: {err}",
+                    path.display()
+                )
             });
-            assert_eq!(format, Format::Png, "natural benchmark corpus must contain PNG files");
+            assert_eq!(
+                format,
+                Format::Png,
+                "natural benchmark corpus must contain PNG files"
+            );
             NaturalImage { image }
         })
         .collect::<Vec<_>>();
@@ -400,7 +426,10 @@ fn encode_image(image: &ImageData, format: Format, quality: u8) -> Vec<u8> {
         .unwrap()
 }
 
-fn aggregate_compression_metrics(info: &NaturalCorpusInfo, encoded_bytes: u64) -> CompressionMetrics {
+fn aggregate_compression_metrics(
+    info: &NaturalCorpusInfo,
+    encoded_bytes: u64,
+) -> CompressionMetrics {
     CompressionMetrics {
         raw_bytes: info.total_raw_bytes,
         encoded_bytes,
@@ -425,7 +454,11 @@ fn print_natural_compression_table(corpus: &NaturalCorpusInfo, rows: &[Compressi
     print_compression_table_rows(rows);
 }
 
-fn print_natural_size_change_table(title: &str, corpus: &NaturalCorpusInfo, rows: &[SizeChangeRow]) {
+fn print_natural_size_change_table(
+    title: &str,
+    corpus: &NaturalCorpusInfo,
+    rows: &[SizeChangeRow],
+) {
     println!();
     println!("{title}");
     println!(
@@ -474,7 +507,13 @@ fn print_size_change_table_rows(rows: &[SizeChangeRow]) {
 }
 
 fn encodable_formats() -> Vec<Format> {
-    vec![Format::Jpeg, Format::Png, Format::WebP, Format::Qoi, Format::Avif]
+    vec![
+        Format::Jpeg,
+        Format::Png,
+        Format::WebP,
+        Format::Qoi,
+        Format::Avif,
+    ]
 }
 
 fn format_label(format: Format) -> &'static str {

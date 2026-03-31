@@ -9,6 +9,7 @@ use super::types::EncodeConfig;
 /// Safe wrapper around libjxl encoder.
 pub(crate) struct Encoder {
     ptr: *mut JxlEncoder,
+    runner_ptr: *mut std::ffi::c_void,
 }
 
 impl Encoder {
@@ -18,7 +19,10 @@ impl Encoder {
         if ptr.is_null() {
             return Err(Error::Encode("failed to create JXL encoder".into()));
         }
-        Ok(Self { ptr })
+        Ok(Self {
+            ptr,
+            runner_ptr: ptr::null_mut(),
+        })
     }
 
     /// Encode RGBA pixel data into JXL format.
@@ -30,16 +34,14 @@ impl Encoder {
         config: &EncodeConfig,
     ) -> Result<Vec<u8>> {
         unsafe { JxlEncoderReset(self.ptr) };
+        self.configure_parallel_runner(config)?;
 
         self.set_basic_info(width, height, config)?;
         self.set_color_encoding()?;
 
-        let frame_settings =
-            unsafe { JxlEncoderFrameSettingsCreate(self.ptr, ptr::null()) };
+        let frame_settings = unsafe { JxlEncoderFrameSettingsCreate(self.ptr, ptr::null()) };
         if frame_settings.is_null() {
-            return Err(Error::Encode(
-                "failed to create frame settings".into(),
-            ));
+            return Err(Error::Encode("failed to create frame settings".into()));
         }
 
         self.configure_frame(frame_settings, config)?;
@@ -50,12 +52,36 @@ impl Encoder {
         self.process_output()
     }
 
-    fn set_basic_info(
-        &self,
-        width: u32,
-        height: u32,
-        config: &EncodeConfig,
-    ) -> Result<()> {
+    fn configure_parallel_runner(&mut self, config: &EncodeConfig) -> Result<()> {
+        if !self.runner_ptr.is_null() {
+            unsafe {
+                JxlThreadParallelRunnerDestroy(self.runner_ptr);
+            }
+            self.runner_ptr = ptr::null_mut();
+        }
+
+        let Some(thread_budget) = config.threads else {
+            return Ok(());
+        };
+
+        let worker_threads = thread_budget.saturating_sub(1);
+        let runner_ptr = unsafe { JxlThreadParallelRunnerCreate(ptr::null(), worker_threads) };
+        if runner_ptr.is_null() {
+            return Err(Error::Encode("failed to create JXL parallel runner".into()));
+        }
+
+        unsafe {
+            check_status(
+                JxlEncoderSetParallelRunner(self.ptr, Some(JxlThreadParallelRunner), runner_ptr),
+                "set parallel runner",
+            )?;
+        }
+
+        self.runner_ptr = runner_ptr;
+        Ok(())
+    }
+
+    fn set_basic_info(&self, width: u32, height: u32, config: &EncodeConfig) -> Result<()> {
         unsafe {
             let mut info: JxlBasicInfo = std::mem::zeroed();
             info.xsize = width;
@@ -69,10 +95,7 @@ impl Encoder {
             info.orientation = JxlOrientation_JXL_ORIENT_IDENTITY;
             info.uses_original_profile = if config.lossless { 1 } else { 0 };
 
-            check_status(
-                JxlEncoderSetBasicInfo(self.ptr, &info),
-                "set basic info",
-            )
+            check_status(JxlEncoderSetBasicInfo(self.ptr, &info), "set basic info")
         }
     }
 
@@ -94,10 +117,7 @@ impl Encoder {
     ) -> Result<()> {
         if config.lossless {
             unsafe {
-                check_status(
-                    JxlEncoderSetFrameLossless(settings, 1),
-                    "set lossless",
-                )?;
+                check_status(JxlEncoderSetFrameLossless(settings, 1), "set lossless")?;
             }
         }
         unsafe {
@@ -127,12 +147,7 @@ impl Encoder {
 
         unsafe {
             check_status(
-                JxlEncoderAddImageFrame(
-                    settings,
-                    &format,
-                    pixels.as_ptr().cast(),
-                    pixels.len(),
-                ),
+                JxlEncoderAddImageFrame(settings, &format, pixels.as_ptr().cast(), pixels.len()),
                 "add image frame",
             )
         }
@@ -146,9 +161,8 @@ impl Encoder {
             let mut next_out = buffer.as_mut_ptr();
             let mut avail_out = buffer.len();
 
-            let status = unsafe {
-                JxlEncoderProcessOutput(self.ptr, &mut next_out, &mut avail_out)
-            };
+            let status =
+                unsafe { JxlEncoderProcessOutput(self.ptr, &mut next_out, &mut avail_out) };
 
             let written = buffer.len() - avail_out;
             all_output.extend_from_slice(&buffer[..written]);
@@ -167,6 +181,9 @@ impl Encoder {
 impl Drop for Encoder {
     fn drop(&mut self) {
         unsafe {
+            if !self.runner_ptr.is_null() {
+                JxlThreadParallelRunnerDestroy(self.runner_ptr);
+            }
             JxlEncoderDestroy(self.ptr);
         }
     }

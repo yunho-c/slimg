@@ -71,7 +71,12 @@ impl ResizeMode {
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CropMode {
     /// Extract a specific region.
-    Region { x: u32, y: u32, width: u32, height: u32 },
+    Region {
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    },
     /// Crop to an aspect ratio (centered).
     AspectRatio { width: u32, height: u32 },
 }
@@ -79,11 +84,20 @@ pub enum CropMode {
 impl CropMode {
     fn to_core(&self) -> slimg_core::CropMode {
         match self {
-            CropMode::Region { x, y, width, height } => slimg_core::CropMode::Region {
-                x: *x, y: *y, width: *width, height: *height,
+            CropMode::Region {
+                x,
+                y,
+                width,
+                height,
+            } => slimg_core::CropMode::Region {
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
             },
             CropMode::AspectRatio { width, height } => slimg_core::CropMode::AspectRatio {
-                width: *width, height: *height,
+                width: *width,
+                height: *height,
             },
         }
     }
@@ -303,6 +317,7 @@ fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineResul
     let core_options = slimg_core::PipelineOptions {
         format: options.format.to_core(),
         quality: options.quality,
+        threads: None,
         resize: options.resize.as_ref().map(|r| r.to_core()),
         crop: options.crop.as_ref().map(|c| c.to_core()),
         extend: options.extend.as_ref().map(|e| e.to_core()),

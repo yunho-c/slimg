@@ -23,6 +23,7 @@ fn convert_jpeg_to_webp() {
     let jpeg_options = PipelineOptions {
         format: Format::Jpeg,
         quality: 90,
+        threads: None,
         resize: None,
         crop: None,
         extend: None,
@@ -42,6 +43,7 @@ fn convert_jpeg_to_webp() {
     let webp_options = PipelineOptions {
         format: Format::WebP,
         quality: 80,
+        threads: None,
         resize: None,
         crop: None,
         extend: None,
@@ -63,6 +65,7 @@ fn convert_with_resize() {
     let options = PipelineOptions {
         format: Format::Png,
         quality: 80,
+        threads: None,
         resize: Some(ResizeMode::Width(50)),
         crop: None,
         extend: None,
@@ -83,12 +86,19 @@ fn convert_with_resize() {
 fn roundtrip_all_encodable_formats() {
     let image = create_test_image();
 
-    let formats = vec![Format::Jpeg, Format::Png, Format::WebP, Format::Qoi, Format::Avif];
+    let formats = vec![
+        Format::Jpeg,
+        Format::Png,
+        Format::WebP,
+        Format::Qoi,
+        Format::Avif,
+    ];
 
     for fmt in formats {
         let options = PipelineOptions {
             format: fmt,
             quality: 80,
+            threads: None,
             resize: None,
             crop: None,
             extend: None,
@@ -121,8 +131,14 @@ fn convert_with_crop_region() {
     let options = PipelineOptions {
         format: Format::Png,
         quality: 80,
+        threads: None,
         resize: None,
-        crop: Some(CropMode::Region { x: 10, y: 10, width: 50, height: 40 }),
+        crop: Some(CropMode::Region {
+            x: 10,
+            y: 10,
+            width: 50,
+            height: 40,
+        }),
         extend: None,
         fill_color: None,
     };
@@ -141,8 +157,12 @@ fn convert_with_crop_aspect_ratio() {
     let options = PipelineOptions {
         format: Format::WebP,
         quality: 80,
+        threads: None,
         resize: None,
-        crop: Some(CropMode::AspectRatio { width: 1, height: 1 }),
+        crop: Some(CropMode::AspectRatio {
+            width: 1,
+            height: 1,
+        }),
         extend: None,
         fill_color: None,
     };
@@ -161,9 +181,13 @@ fn extend_aspect_ratio_jpeg() {
     let options = PipelineOptions {
         format: Format::Jpeg,
         quality: 80,
+        threads: None,
         resize: None,
         crop: None,
-        extend: Some(ExtendMode::AspectRatio { width: 1, height: 1 }),
+        extend: Some(ExtendMode::AspectRatio {
+            width: 1,
+            height: 1,
+        }),
         fill_color: Some(FillColor::Solid([255, 255, 255, 255])),
     };
 
@@ -188,9 +212,13 @@ fn extend_size_png() {
     let options = PipelineOptions {
         format: Format::Png,
         quality: 80,
+        threads: None,
         resize: None,
         crop: None,
-        extend: Some(ExtendMode::Size { width: target_w, height: target_h }),
+        extend: Some(ExtendMode::Size {
+            width: target_w,
+            height: target_h,
+        }),
         fill_color: Some(FillColor::Transparent),
     };
 

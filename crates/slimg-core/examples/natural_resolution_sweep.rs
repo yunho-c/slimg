@@ -7,9 +7,9 @@ use std::time::{Duration, Instant};
 
 use plotters::prelude::*;
 use serde::Serialize;
-use slimg_core::codec::{get_codec, EncodeOptions};
-use slimg_core::resize::{resize, ResizeMode};
-use slimg_core::{decode_file, Format, ImageData};
+use slimg_core::codec::{EncodeOptions, get_codec};
+use slimg_core::resize::{ResizeMode, resize};
+use slimg_core::{Format, ImageData, decode_file};
 
 const NATURAL_BENCH_ENV: &str = "SLIMG_BENCH_NATURAL_DIR";
 const NATURAL_BENCH_DEFAULT_REPO: &str =
@@ -272,7 +272,10 @@ fn measure_format(
     let mut points = Vec::with_capacity(corpora.len());
 
     for corpus in corpora {
-        let options = EncodeOptions { quality };
+        let options = EncodeOptions {
+            quality,
+            threads: None,
+        };
 
         for image in &corpus.images {
             let encoded = codec.encode(image, &options)?;

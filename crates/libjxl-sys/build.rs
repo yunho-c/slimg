@@ -131,6 +131,12 @@ fn run_bindgen(src_include: &Path, install_include: &Path, out_file: &Path) {
                 .unwrap(),
         )
         .header(src_include.join("jxl/color_encoding.h").to_str().unwrap())
+        .header(
+            src_include
+                .join("jxl/thread_parallel_runner.h")
+                .to_str()
+                .unwrap(),
+        )
         .clang_arg(format!("-I{}", src_include.display()))
         .clang_arg(format!("-I{}", install_include.display()))
         .clang_arg(format!("--target={target}"))
@@ -147,8 +153,13 @@ fn run_bindgen(src_include: &Path, install_include: &Path, out_file: &Path) {
         .allowlist_function("JxlEncoderAddImageFrame")
         .allowlist_function("JxlEncoderCloseInput")
         .allowlist_function("JxlEncoderProcessOutput")
+        .allowlist_function("JxlEncoderSetParallelRunner")
         .allowlist_function("JxlEncoderDistanceFromQuality")
         .allowlist_function("JxlColorEncodingSetToSRGB")
+        .allowlist_function("JxlThreadParallelRunner")
+        .allowlist_function("JxlThreadParallelRunnerCreate")
+        .allowlist_function("JxlThreadParallelRunnerDestroy")
+        .allowlist_function("JxlThreadParallelRunnerDefaultNumWorkerThreads")
         // Decoder functions
         .allowlist_function("JxlDecoderCreate")
         .allowlist_function("JxlDecoderDestroy")
@@ -161,6 +172,7 @@ fn run_bindgen(src_include: &Path, install_include: &Path, out_file: &Path) {
         .allowlist_function("JxlDecoderImageOutBufferSize")
         .allowlist_function("JxlDecoderSetImageOutBuffer")
         .allowlist_function("JxlDecoderReleaseInput")
+        .allowlist_function("JxlDecoderSetParallelRunner")
         // Encoder types
         .allowlist_type("JxlEncoderStatus")
         .allowlist_type("JxlEncoderFrameSettingId")
@@ -172,6 +184,8 @@ fn run_bindgen(src_include: &Path, install_include: &Path, out_file: &Path) {
         // Shared types
         .allowlist_type("JxlBasicInfo")
         .allowlist_type("JxlPixelFormat")
+        .allowlist_type("JxlParallelRunner")
+        .allowlist_type("JxlParallelRetCode")
         .allowlist_type("JxlDataType")
         .allowlist_type("JxlEndianness")
         .allowlist_type("JxlColorEncoding")
@@ -277,6 +291,7 @@ fn emit_link_libs() {
     // libjxl core
     println!("cargo:rustc-link-lib=static=jxl");
     println!("cargo:rustc-link-lib=static=jxl_cms");
+    println!("cargo:rustc-link-lib=static=jxl_threads");
 
     // libjxl vendored dependencies
     println!("cargo:rustc-link-lib=static=hwy");

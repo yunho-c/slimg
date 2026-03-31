@@ -14,12 +14,24 @@ use support::{
 /// JXL is excluded because encoding is not supported (license restrictions).
 /// AVIF encoding works on all platforms via `ravif`.
 fn encodable_formats() -> Vec<Format> {
-    vec![Format::Jpeg, Format::Png, Format::WebP, Format::Qoi, Format::Avif]
+    vec![
+        Format::Jpeg,
+        Format::Png,
+        Format::WebP,
+        Format::Qoi,
+        Format::Avif,
+    ]
 }
 
 /// Formats that support both encoding and decoding (needed for decode benchmarks).
 fn decodable_formats() -> Vec<Format> {
-    vec![Format::Jpeg, Format::Png, Format::WebP, Format::Qoi, Format::Avif]
+    vec![
+        Format::Jpeg,
+        Format::Png,
+        Format::WebP,
+        Format::Qoi,
+        Format::Avif,
+    ]
 }
 
 #[derive(Debug)]
@@ -42,6 +54,7 @@ fn bench_codec(c: &mut Criterion) {
     let fixture = fixture_info(&image).expect("fixture metrics should be valid");
     let options = EncodeOptions {
         quality: BENCH_QUALITY,
+        threads: None,
     };
     let pixel_count = u64::from(fixture.width) * u64::from(fixture.height);
     let samples = build_codec_samples(&image, &options);
@@ -53,7 +66,12 @@ fn bench_codec(c: &mut Criterion) {
         })
         .collect::<Vec<_>>();
 
-    print_compression_table("Codec compression metrics", &fixture, BENCH_QUALITY, &report_rows);
+    print_compression_table(
+        "Codec compression metrics",
+        &fixture,
+        BENCH_QUALITY,
+        &report_rows,
+    );
     write_json_report(
         "codec",
         &CodecMetricsReport {
@@ -102,7 +120,9 @@ fn build_codec_samples(image: &slimg_core::ImageData, options: &EncodeOptions) -
         .filter(|format| decodable_formats().contains(format))
         .map(|format| {
             let codec = get_codec(format);
-            let encoded = codec.encode(image, options).expect("sample encode should succeed");
+            let encoded = codec
+                .encode(image, options)
+                .expect("sample encode should succeed");
             let metrics = compression_metrics(image, encoded.len())
                 .expect("compression metrics should be valid");
 

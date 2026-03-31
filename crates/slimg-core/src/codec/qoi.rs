@@ -71,7 +71,10 @@ mod tests {
     fn encode_and_decode_roundtrip() {
         let codec = QoiCodec;
         let original = create_test_image(64, 48);
-        let options = EncodeOptions { quality: 90 };
+        let options = EncodeOptions {
+            quality: 90,
+            threads: None,
+        };
 
         let encoded = codec.encode(&original, &options).expect("encode failed");
 

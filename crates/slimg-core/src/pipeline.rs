@@ -2,10 +2,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::codec::{EncodeOptions, ImageData, get_codec};
+use crate::crop::{self, CropMode};
 use crate::error::{Error, Result};
 use crate::extend::{self, ExtendMode, FillColor};
 use crate::format::Format;
-use crate::crop::{self, CropMode};
 use crate::resize::{self, ResizeMode};
 
 /// Options for a conversion pipeline.
@@ -15,6 +15,8 @@ pub struct PipelineOptions {
     pub format: Format,
     /// Encoding quality (0..=100).
     pub quality: u8,
+    /// Optional thread budget for internally-threaded encoders.
+    pub threads: Option<usize>,
     /// Optional resize to apply before encoding.
     pub resize: Option<ResizeMode>,
     /// Optional crop to apply before encoding.
@@ -91,6 +93,7 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
     let codec = get_codec(options.format);
     let encode_opts = EncodeOptions {
         quality: options.quality,
+        threads: options.threads,
     };
     let data = codec.encode(&image, &encode_opts)?;
 
@@ -104,6 +107,15 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
 
 /// Decode the data and re-encode in the same format at the given quality.
 pub fn optimize(data: &[u8], quality: u8) -> Result<PipelineResult> {
+    optimize_with_threads(data, quality, None)
+}
+
+/// Decode the data and re-encode in the same format at the given quality and thread budget.
+pub fn optimize_with_threads(
+    data: &[u8],
+    quality: u8,
+    threads: Option<usize>,
+) -> Result<PipelineResult> {
     let (image, format) = decode(data)?;
 
     if !format.can_encode() {
@@ -111,7 +123,7 @@ pub fn optimize(data: &[u8], quality: u8) -> Result<PipelineResult> {
     }
 
     let codec = get_codec(format);
-    let encode_opts = EncodeOptions { quality };
+    let encode_opts = EncodeOptions { quality, threads };
     let encoded = codec.encode(&image, &encode_opts)?;
 
     Ok(PipelineResult {
@@ -167,6 +179,7 @@ mod tests {
         let options = PipelineOptions {
             format: Format::Jxl,
             quality: 80,
+            threads: None,
             resize: None,
             crop: None,
             extend: None,

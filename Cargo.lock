@@ -1868,6 +1868,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "slimg-exec"
+version = "0.1.0"
+dependencies = [
+ "slimg-core",
+]
+
+[[package]]
 name = "slimg-ffi"
 version = "0.5.1"
 dependencies = [

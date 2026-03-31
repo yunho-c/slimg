@@ -41,6 +41,7 @@ impl Codec for AvifCodec {
         let encoded = ravif::Encoder::new()
             .with_quality(options.quality as f32)
             .with_speed(6)
+            .with_num_threads(options.threads.or(Some(1)))
             .encode_rgba(buffer)
             .map_err(|e| Error::Encode(format!("ravif encode: {e}")))?;
 
@@ -71,7 +72,10 @@ mod tests {
     fn encode_produces_valid_avif() {
         let codec = AvifCodec;
         let image = create_test_image(64, 48);
-        let options = EncodeOptions { quality: 80 };
+        let options = EncodeOptions {
+            quality: 80,
+            threads: None,
+        };
 
         let encoded = codec.encode(&image, &options).expect("encode failed");
 
@@ -88,7 +92,10 @@ mod tests {
     fn encode_and_decode_roundtrip() {
         let codec = AvifCodec;
         let original = create_test_image(64, 48);
-        let options = EncodeOptions { quality: 80 };
+        let options = EncodeOptions {
+            quality: 80,
+            threads: None,
+        };
 
         let encoded = codec.encode(&original, &options).expect("encode failed");
         let decoded = codec.decode(&encoded).expect("decode failed");

@@ -1,0 +1,11 @@
+[package]
+name = "slimg-exec"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Execution planning and batch scheduling for slimg workloads"
+repository = "https://github.com/clroot/slimg"
+homepage = "https://github.com/clroot/slimg"
+
+[dependencies]
+slimg-core = { path = "../slimg-core" }

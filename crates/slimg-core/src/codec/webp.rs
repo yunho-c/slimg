@@ -53,7 +53,10 @@ mod tests {
     fn encode_and_decode_roundtrip() {
         let codec = WebPCodec;
         let original = create_test_image(64, 48);
-        let options = EncodeOptions { quality: 90 };
+        let options = EncodeOptions {
+            quality: 90,
+            threads: None,
+        };
 
         let encoded = codec.encode(&original, &options).expect("encode failed");
 
@@ -73,10 +76,22 @@ mod tests {
         let image = create_test_image(128, 96);
 
         let high = codec
-            .encode(&image, &EncodeOptions { quality: 95 })
+            .encode(
+                &image,
+                &EncodeOptions {
+                    quality: 95,
+                    threads: None,
+                },
+            )
             .expect("encode q95 failed");
         let low = codec
-            .encode(&image, &EncodeOptions { quality: 20 })
+            .encode(
+                &image,
+                &EncodeOptions {
+                    quality: 20,
+                    threads: None,
+                },
+            )
             .expect("encode q20 failed");
 
         assert!(
