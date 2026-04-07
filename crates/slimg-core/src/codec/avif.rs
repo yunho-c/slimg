@@ -6,7 +6,11 @@ use crate::format::Format;
 
 use super::{Codec, EncodeOptions, ImageData};
 
-/// AVIF codec backed by ravif for encoding and the `image` crate for decoding.
+/// AVIF codec backed by ravif for encoding.
+///
+/// Decoding is temporarily unavailable while native AVIF decode support is
+/// removed from the dependency graph to avoid `dav1d-sys` macOS cross-build
+/// failures.
 pub struct AvifCodec;
 
 impl Codec for AvifCodec {
@@ -15,14 +19,10 @@ impl Codec for AvifCodec {
     }
 
     fn decode(&self, data: &[u8]) -> Result<ImageData> {
-        let img = image::load_from_memory_with_format(data, image::ImageFormat::Avif)
-            .map_err(|e| Error::Decode(format!("avif decode: {e}")))?;
-
-        let rgba = img.to_rgba8();
-        let width = rgba.width();
-        let height = rgba.height();
-
-        Ok(ImageData::new(width, height, rgba.into_raw()))
+        let _ = data;
+        Err(Error::Decode(
+            "AVIF decode support is temporarily unavailable".to_string(),
+        ))
     }
 
     fn encode(&self, image: &ImageData, options: &EncodeOptions) -> Result<Vec<u8>> {
@@ -89,22 +89,20 @@ mod tests {
     }
 
     #[test]
-    fn encode_and_decode_roundtrip() {
+    fn decode_is_temporarily_unavailable() {
         let codec = AvifCodec;
-        let original = create_test_image(64, 48);
+        let image = create_test_image(64, 48);
         let options = EncodeOptions {
             quality: 80,
             threads: None,
         };
 
-        let encoded = codec.encode(&original, &options).expect("encode failed");
-        let decoded = codec.decode(&encoded).expect("decode failed");
-
-        assert_eq!(decoded.width, original.width);
-        assert_eq!(decoded.height, original.height);
-        assert_eq!(
-            decoded.data.len(),
-            (decoded.width * decoded.height * 4) as usize
+        let encoded = codec.encode(&image, &options).expect("encode failed");
+        let err = codec.decode(&encoded).expect_err("decode should be unavailable");
+        assert!(
+            err.to_string()
+                .contains("AVIF decode support is temporarily unavailable"),
+            "unexpected decode error: {err}"
         );
     }
 }
