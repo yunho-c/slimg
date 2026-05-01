@@ -9,7 +9,7 @@ Image optimization library for Rust. Decode, encode, convert, and resize images 
 | JPEG | Yes | Yes | MozJPEG by default; optional `jpeg-backend-jpegli` feature |
 | PNG | Yes | Yes | OxiPNG (Zopfli) |
 | WebP | Yes | Yes | libwebp |
-| AVIF | macOS only | Yes | ravif (AV1) |
+| AVIF | Yes | Yes | zenavif decode; ravif encode (AV1) |
 | QOI | Yes | Yes | rapid-qoi |
 | JPEG XL | Yes | Yes | libjxl |
 

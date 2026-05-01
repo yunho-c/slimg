@@ -1,16 +1,14 @@
 use imgref::Img;
 use rgb::RGBA8;
+use zenavif::{DecoderConfig, Unstoppable};
+use zenpixels_convert::PixelBufferConvertTypedExt;
 
 use crate::error::{Error, Result};
 use crate::format::Format;
 
 use super::{Codec, EncodeOptions, ImageData};
 
-/// AVIF codec backed by ravif for encoding.
-///
-/// Decoding is temporarily unavailable while native AVIF decode support is
-/// removed from the dependency graph to avoid `dav1d-sys` macOS cross-build
-/// failures.
+/// AVIF codec backed by zenavif for decoding and ravif for encoding.
 pub struct AvifCodec;
 
 impl Codec for AvifCodec {
@@ -19,9 +17,17 @@ impl Codec for AvifCodec {
     }
 
     fn decode(&self, data: &[u8]) -> Result<ImageData> {
-        let _ = data;
-        Err(Error::Decode(
-            "AVIF decode support is temporarily unavailable".to_string(),
+        let config = DecoderConfig::new().prefer_8bit(true);
+        let decoded = zenavif::decode_with(data, &config, &Unstoppable)
+            .map_err(|e| Error::Decode(format!("zenavif decode: {e}")))?;
+        let width = decoded.width();
+        let height = decoded.height();
+        let rgba = decoded.to_rgba8();
+
+        Ok(ImageData::new(
+            width,
+            height,
+            rgba.copy_to_contiguous_bytes(),
         ))
     }
 
@@ -38,8 +44,9 @@ impl Codec for AvifCodec {
 
         let buffer = Img::new(pixels.as_slice(), width, height);
 
+        let ravif_quality = options.quality.max(1) as f32;
         let encoded = ravif::Encoder::new()
-            .with_quality(options.quality as f32)
+            .with_quality(ravif_quality)
             .with_speed(6)
             .with_num_threads(options.threads.or(Some(1)))
             .encode_rgba(buffer)
@@ -89,7 +96,7 @@ mod tests {
     }
 
     #[test]
-    fn decode_is_temporarily_unavailable() {
+    fn encode_and_decode_returns_rgba() {
         let codec = AvifCodec;
         let image = create_test_image(64, 48);
         let options = EncodeOptions {
@@ -98,11 +105,23 @@ mod tests {
         };
 
         let encoded = codec.encode(&image, &options).expect("encode failed");
-        let err = codec.decode(&encoded).expect_err("decode should be unavailable");
-        assert!(
-            err.to_string()
-                .contains("AVIF decode support is temporarily unavailable"),
-            "unexpected decode error: {err}"
-        );
+        let decoded = codec.decode(&encoded).expect("decode failed");
+
+        assert_eq!(decoded.width, image.width);
+        assert_eq!(decoded.height, image.height);
+        assert_eq!(decoded.data.len(), (64 * 48 * 4) as usize);
+    }
+
+    #[test]
+    fn encode_accepts_zero_quality() {
+        let codec = AvifCodec;
+        let image = create_test_image(64, 48);
+        let options = EncodeOptions {
+            quality: 0,
+            threads: None,
+        };
+
+        let encoded = codec.encode(&image, &options).expect("encode failed");
+        assert!(!encoded.is_empty());
     }
 }
