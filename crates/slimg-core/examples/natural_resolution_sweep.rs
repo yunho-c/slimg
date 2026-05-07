@@ -274,6 +274,7 @@ fn measure_format(
     for corpus in corpora {
         let options = EncodeOptions {
             quality,
+            effort: None,
             threads: None,
         };
 

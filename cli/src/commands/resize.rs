@@ -30,6 +30,10 @@ pub struct ResizeArgs {
     #[arg(short, long, default_value_t = 80)]
     pub quality: u8,
 
+    /// Encoding effort (0-100, higher is slower/smaller)
+    #[arg(short, long)]
+    pub effort: Option<u8>,
+
     /// Output path
     #[arg(short, long)]
     pub output: Option<PathBuf>,
@@ -61,6 +65,8 @@ pub fn run(args: ResizeArgs) -> anyhow::Result<()> {
     let options = PipelineOptions {
         format: target_format,
         quality: args.quality,
+        effort: args.effort,
+        threads: None,
         resize: Some(resize_mode),
         crop: None,
         extend: None,

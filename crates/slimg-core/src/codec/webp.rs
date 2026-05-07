@@ -24,9 +24,28 @@ impl Codec for WebPCodec {
 
     fn encode(&self, image: &ImageData, options: &EncodeOptions) -> Result<Vec<u8>> {
         let encoder = webp::Encoder::from_rgba(&image.data, image.width, image.height);
-        let encoded = encoder.encode(options.quality as f32);
+        let encoded = if let Some(effort) = options.effort {
+            let mut config = webp::WebPConfig::new()
+                .map_err(|error| Error::Encode(format!("webp config init: {error:?}")))?;
+            config.quality = options.quality as f32;
+            config.method = effort_to_webp_method(effort);
+            encoder
+                .encode_advanced(&config)
+                .map_err(|error| Error::Encode(format!("webp encode: {error:?}")))?
+        } else {
+            encoder.encode(options.quality as f32)
+        };
 
         Ok(encoded.to_vec())
+    }
+}
+
+fn effort_to_webp_method(effort: u8) -> i32 {
+    let effort = effort.min(100) as u16;
+    if effort <= 50 {
+        ((effort * 4 + 25) / 50) as i32
+    } else {
+        (4 + ((effort - 50) * 2 + 25) / 50) as i32
     }
 }
 
@@ -55,6 +74,7 @@ mod tests {
         let original = create_test_image(64, 48);
         let options = EncodeOptions {
             quality: 90,
+            effort: None,
             threads: None,
         };
 
@@ -80,6 +100,7 @@ mod tests {
                 &image,
                 &EncodeOptions {
                     quality: 95,
+                    effort: None,
                     threads: None,
                 },
             )
@@ -89,6 +110,7 @@ mod tests {
                 &image,
                 &EncodeOptions {
                     quality: 20,
+                    effort: None,
                     threads: None,
                 },
             )

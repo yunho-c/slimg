@@ -53,6 +53,10 @@ impl ImageData {
 pub struct EncodeOptions {
     /// Quality value in the range 0..=100.
     pub quality: u8,
+    /// Optional effort value in the range 0..=100.
+    ///
+    /// Higher values favor smaller output at the cost of slower encoding.
+    pub effort: Option<u8>,
     /// Optional thread budget for codecs that support internal parallelism.
     pub threads: Option<usize>,
 }
@@ -61,6 +65,7 @@ impl Default for EncodeOptions {
     fn default() -> Self {
         Self {
             quality: 80,
+            effort: None,
             threads: None,
         }
     }
@@ -108,6 +113,7 @@ mod tests {
     fn encode_options_default() {
         let opts = EncodeOptions::default();
         assert_eq!(opts.quality, 80);
+        assert_eq!(opts.effort, None);
         assert_eq!(opts.threads, None);
     }
 

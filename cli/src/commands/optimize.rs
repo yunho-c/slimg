@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Args;
 use rayon::prelude::*;
-use slimg_core::{optimize, output_path};
+use slimg_core::{EncodeOptions, optimize_with_options, output_path};
 
 use super::{ErrorCollector, collect_files, configure_thread_pool, make_progress_bar, safe_write};
 
@@ -14,6 +14,10 @@ pub struct OptimizeArgs {
     /// Encoding quality (0-100)
     #[arg(short, long, default_value_t = 80)]
     pub quality: u8,
+
+    /// Encoding effort (0-100, higher is slower/smaller)
+    #[arg(short, long)]
+    pub effort: Option<u8>,
 
     /// Output path (file or directory)
     #[arg(short, long)]
@@ -49,7 +53,14 @@ pub fn run(args: OptimizeArgs) -> anyhow::Result<()> {
             let original_data = std::fs::read(file)?;
             let original_size = original_data.len() as u64;
 
-            let result = optimize(&original_data, args.quality)?;
+            let result = optimize_with_options(
+                &original_data,
+                EncodeOptions {
+                    quality: args.quality,
+                    effort: args.effort,
+                    threads: None,
+                },
+            )?;
             let new_size = result.data.len() as u64;
 
             let out = if args.overwrite {

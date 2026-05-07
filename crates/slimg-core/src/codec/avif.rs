@@ -47,12 +47,21 @@ impl Codec for AvifCodec {
         let ravif_quality = options.quality.max(1) as f32;
         let encoded = ravif::Encoder::new()
             .with_quality(ravif_quality)
-            .with_speed(6)
+            .with_speed(options.effort.map(effort_to_ravif_speed).unwrap_or(6))
             .with_num_threads(options.threads.or(Some(1)))
             .encode_rgba(buffer)
             .map_err(|e| Error::Encode(format!("ravif encode: {e}")))?;
 
         Ok(encoded.avif_file)
+    }
+}
+
+fn effort_to_ravif_speed(effort: u8) -> u8 {
+    let effort = effort.min(100) as u16;
+    if effort <= 50 {
+        (10 - ((effort * 4 + 25) / 50)) as u8
+    } else {
+        (6 - (((effort - 50) * 5 + 25) / 50)) as u8
     }
 }
 
@@ -81,6 +90,7 @@ mod tests {
         let image = create_test_image(64, 48);
         let options = EncodeOptions {
             quality: 80,
+            effort: None,
             threads: None,
         };
 
@@ -101,6 +111,7 @@ mod tests {
         let image = create_test_image(64, 48);
         let options = EncodeOptions {
             quality: 80,
+            effort: None,
             threads: None,
         };
 
@@ -118,6 +129,7 @@ mod tests {
         let image = create_test_image(64, 48);
         let options = EncodeOptions {
             quality: 0,
+            effort: None,
             threads: None,
         };
 

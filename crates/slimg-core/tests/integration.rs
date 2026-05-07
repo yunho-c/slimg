@@ -23,6 +23,7 @@ fn convert_jpeg_to_webp() {
     let jpeg_options = PipelineOptions {
         format: Format::Jpeg,
         quality: 90,
+        effort: None,
         threads: None,
         resize: None,
         crop: None,
@@ -43,6 +44,7 @@ fn convert_jpeg_to_webp() {
     let webp_options = PipelineOptions {
         format: Format::WebP,
         quality: 80,
+        effort: None,
         threads: None,
         resize: None,
         crop: None,
@@ -65,6 +67,7 @@ fn convert_with_resize() {
     let options = PipelineOptions {
         format: Format::Png,
         quality: 80,
+        effort: None,
         threads: None,
         resize: Some(ResizeMode::Width(50)),
         crop: None,
@@ -98,6 +101,7 @@ fn roundtrip_all_encodable_formats() {
         let options = PipelineOptions {
             format: fmt,
             quality: 80,
+            effort: None,
             threads: None,
             resize: None,
             crop: None,
@@ -131,6 +135,7 @@ fn convert_with_crop_region() {
     let options = PipelineOptions {
         format: Format::Png,
         quality: 80,
+        effort: None,
         threads: None,
         resize: None,
         crop: Some(CropMode::Region {
@@ -157,6 +162,7 @@ fn convert_with_crop_aspect_ratio() {
     let options = PipelineOptions {
         format: Format::WebP,
         quality: 80,
+        effort: None,
         threads: None,
         resize: None,
         crop: Some(CropMode::AspectRatio {
@@ -181,6 +187,7 @@ fn extend_aspect_ratio_jpeg() {
     let options = PipelineOptions {
         format: Format::Jpeg,
         quality: 80,
+        effort: None,
         threads: None,
         resize: None,
         crop: None,
@@ -212,6 +219,7 @@ fn extend_size_png() {
     let options = PipelineOptions {
         format: Format::Png,
         quality: 80,
+        effort: None,
         threads: None,
         resize: None,
         crop: None,

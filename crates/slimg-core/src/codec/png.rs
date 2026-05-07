@@ -41,20 +41,35 @@ impl Codec for PngCodec {
 
         let raw_bytes = raw_png.into_inner();
 
-        // Map quality to oxipng optimization preset.
-        let preset = match options.quality {
-            90..=100 => 1,
-            70..=89 => 2,
-            50..=69 => 3,
-            30..=49 => 4,
-            _ => 6,
-        };
+        let preset = options
+            .effort
+            .map(effort_to_oxipng_preset)
+            .unwrap_or_else(|| quality_to_oxipng_preset(options.quality));
 
         let opts = oxipng::Options::from_preset(preset);
         let optimized = oxipng::optimize_from_memory(&raw_bytes, &opts)
             .map_err(|e| Error::Encode(format!("oxipng optimize: {e}")))?;
 
         Ok(optimized)
+    }
+}
+
+fn quality_to_oxipng_preset(quality: u8) -> u8 {
+    match quality {
+        90..=100 => 1,
+        70..=89 => 2,
+        50..=69 => 3,
+        30..=49 => 4,
+        _ => 6,
+    }
+}
+
+fn effort_to_oxipng_preset(effort: u8) -> u8 {
+    let effort = effort.min(100) as u16;
+    if effort <= 50 {
+        ((effort * 2 + 25) / 50) as u8
+    } else {
+        (2 + ((effort - 50) * 4 + 25) / 50) as u8
     }
 }
 
@@ -83,6 +98,7 @@ mod tests {
         let original = create_test_image(64, 48);
         let options = EncodeOptions {
             quality: 90,
+            effort: None,
             threads: None,
         };
 

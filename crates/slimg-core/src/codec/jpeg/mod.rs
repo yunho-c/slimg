@@ -63,6 +63,7 @@ mod tests {
         let original = create_test_image(64, 48);
         let options = EncodeOptions {
             quality: 90,
+            effort: None,
             threads: None,
         };
 
@@ -98,6 +99,7 @@ mod tests {
                 &image,
                 &EncodeOptions {
                     quality: 95,
+                    effort: None,
                     threads: None,
                 },
             )
@@ -107,6 +109,7 @@ mod tests {
                 &image,
                 &EncodeOptions {
                     quality: 30,
+                    effort: None,
                     threads: None,
                 },
             )

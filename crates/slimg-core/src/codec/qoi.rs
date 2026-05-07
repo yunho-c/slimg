@@ -73,6 +73,7 @@ mod tests {
         let original = create_test_image(64, 48);
         let options = EncodeOptions {
             quality: 90,
+            effort: None,
             threads: None,
         };
 

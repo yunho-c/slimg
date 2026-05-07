@@ -15,6 +15,10 @@ pub struct PipelineOptions {
     pub format: Format,
     /// Encoding quality (0..=100).
     pub quality: u8,
+    /// Optional encoder effort (0..=100).
+    ///
+    /// Higher values favor smaller output at the cost of slower encoding.
+    pub effort: Option<u8>,
     /// Optional thread budget for internally-threaded encoders.
     pub threads: Option<usize>,
     /// Optional resize to apply before encoding.
@@ -93,6 +97,7 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
     let codec = get_codec(options.format);
     let encode_opts = EncodeOptions {
         quality: options.quality,
+        effort: options.effort,
         threads: options.threads,
     };
     let data = codec.encode(&image, &encode_opts)?;
@@ -116,6 +121,18 @@ pub fn optimize_with_threads(
     quality: u8,
     threads: Option<usize>,
 ) -> Result<PipelineResult> {
+    optimize_with_options(
+        data,
+        EncodeOptions {
+            quality,
+            effort: None,
+            threads,
+        },
+    )
+}
+
+/// Decode the data and re-encode in the same format with full encoding options.
+pub fn optimize_with_options(data: &[u8], encode_opts: EncodeOptions) -> Result<PipelineResult> {
     let (image, format) = decode(data)?;
 
     if !format.can_encode() {
@@ -123,7 +140,6 @@ pub fn optimize_with_threads(
     }
 
     let codec = get_codec(format);
-    let encode_opts = EncodeOptions { quality, threads };
     let encoded = codec.encode(&image, &encode_opts)?;
 
     Ok(PipelineResult {
@@ -179,6 +195,7 @@ mod tests {
         let options = PipelineOptions {
             format: Format::Jxl,
             quality: 80,
+            effort: None,
             threads: None,
             resize: None,
             crop: None,

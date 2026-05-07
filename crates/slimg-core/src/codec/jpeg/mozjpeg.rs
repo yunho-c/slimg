@@ -44,15 +44,18 @@ pub(super) fn encode(image: &ImageData, options: &EncodeOptions) -> Result<Vec<u
     let height = image.height;
     let rgb_data = image.to_rgb();
     let quality = options.quality as f32;
+    let effort = options.effort;
 
     let result = std::panic::catch_unwind(move || -> Result<Vec<u8>> {
         let mut compress = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_RGB);
 
         compress.set_size(width as usize, height as usize);
         compress.set_quality(quality);
-        compress.set_progressive_mode();
-        compress.set_optimize_scans(true);
-        compress.set_optimize_coding(true);
+        if effort.map(|value| value >= 25).unwrap_or(true) {
+            compress.set_progressive_mode();
+        }
+        compress.set_optimize_scans(effort.map(|value| value >= 50).unwrap_or(true));
+        compress.set_optimize_coding(effort.map(|value| value >= 25).unwrap_or(true));
 
         let mut compressor = compress
             .start_compress(Vec::new())

@@ -43,7 +43,12 @@ let (image, format) = decode_file(Path::new("photo.jpg"))?;
 let result = convert(&image, &PipelineOptions {
     format: Format::WebP,
     quality: 80,
+    effort: None,
+    threads: None,
     resize: None,
+    crop: None,
+    extend: None,
+    fill_color: None,
 })?;
 result.save(Path::new("photo.webp"))?;
 
@@ -51,12 +56,21 @@ result.save(Path::new("photo.webp"))?;
 let result = convert(&image, &PipelineOptions {
     format: Format::Avif,
     quality: 60,
+    effort: Some(75),
+    threads: None,
     resize: Some(ResizeMode::Width(800)),
+    crop: None,
+    extend: None,
+    fill_color: None,
 })?;
 
 // Optimize in-place (re-encode same format)
 let data = std::fs::read("photo.jpg")?;
-let optimized = optimize(&data, 75)?;
+let optimized = optimize_with_options(&data, EncodeOptions {
+    quality: 75,
+    effort: Some(75),
+    threads: None,
+})?;
 optimized.save(Path::new("photo.jpg"))?;
 ```
 

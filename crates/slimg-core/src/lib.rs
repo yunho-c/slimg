@@ -12,6 +12,7 @@ pub use error::{Error, Result};
 pub use extend::{ExtendMode, FillColor};
 pub use format::Format;
 pub use pipeline::{
-    PipelineOptions, PipelineResult, convert, decode, decode_file, optimize, output_path,
+    PipelineOptions, PipelineResult, convert, decode, decode_file, optimize, optimize_with_options,
+    output_path,
 };
 pub use resize::ResizeMode;

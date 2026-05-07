@@ -120,6 +120,18 @@ impl Encoder {
                 check_status(JxlEncoderSetFrameLossless(settings, 1), "set lossless")?;
             }
         }
+        if let Some(effort) = config.effort {
+            unsafe {
+                check_status(
+                    JxlEncoderFrameSettingsSetOption(
+                        settings,
+                        JxlEncoderFrameSettingId_JXL_ENC_FRAME_SETTING_EFFORT,
+                        effort_to_jxl_effort(effort) as i64,
+                    ),
+                    "set effort",
+                )?;
+            }
+        }
         unsafe {
             check_status(
                 JxlEncoderSetFrameDistance(settings, config.distance),
@@ -175,6 +187,15 @@ impl Encoder {
                 return Err(Error::Encode("JXL encoding failed".into()));
             }
         }
+    }
+}
+
+fn effort_to_jxl_effort(effort: u8) -> u8 {
+    let effort = effort.min(100) as u16;
+    if effort <= 50 {
+        (1 + (effort * 6 + 25) / 50) as u8
+    } else {
+        (7 + ((effort - 50) * 3 + 25) / 50) as u8
     }
 }
 

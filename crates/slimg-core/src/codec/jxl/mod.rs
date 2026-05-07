@@ -22,7 +22,8 @@ impl Codec for JxlCodec {
     }
 
     fn encode(&self, image: &ImageData, options: &EncodeOptions) -> Result<Vec<u8>> {
-        let config = types::EncodeConfig::from_quality(options.quality, options.threads);
+        let config =
+            types::EncodeConfig::from_options(options.quality, options.effort, options.threads);
         let mut enc = encoder::Encoder::new()?;
         enc.encode_rgba(&image.data, image.width, image.height, &config)
     }
@@ -52,6 +53,7 @@ mod tests {
         let image = create_test_image(8, 8);
         let options = EncodeOptions {
             quality: 80,
+            effort: None,
             threads: None,
         };
 
@@ -76,6 +78,7 @@ mod tests {
         let image = create_test_image(8, 8);
         let options = EncodeOptions {
             quality: 100,
+            effort: None,
             threads: None,
         };
 
@@ -91,6 +94,7 @@ mod tests {
         let original = create_test_image(16, 16);
         let options = EncodeOptions {
             quality: 90,
+            effort: None,
             threads: None,
         };
 
@@ -108,6 +112,7 @@ mod tests {
         let original = create_test_image(4, 4);
         let options = EncodeOptions {
             quality: 100,
+            effort: None,
             threads: None,
         };
 

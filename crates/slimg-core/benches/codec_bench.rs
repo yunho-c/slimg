@@ -54,6 +54,7 @@ fn bench_codec(c: &mut Criterion) {
     let fixture = fixture_info(&image).expect("fixture metrics should be valid");
     let options = EncodeOptions {
         quality: BENCH_QUALITY,
+        effort: None,
         threads: None,
     };
     let pixel_count = u64::from(fixture.width) * u64::from(fixture.height);
