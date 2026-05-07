@@ -14,12 +14,15 @@ categories = ["multimedia::images", "encoding"]
 default = ["jpeg-backend-mozjpeg"]
 jpeg-backend-mozjpeg = ["dep:mozjpeg"]
 jpeg-backend-jpegli = ["libjxl-sys/jpegli"]
+pngquant = ["dep:imagequant", "dep:png"]
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "webp"] }
+imagequant = { version = "4.4.1", default-features = false, optional = true }
 libjxl-sys = { version = "0.1", path = "../libjxl-sys", package = "slimg-libjxl-sys" }
 mozjpeg = { version = "0.10", optional = true }
 oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
+png = { version = "0.18", optional = true }
 imgref = "1"
 rapid-qoi = "0.6"
 ravif = "0.13"

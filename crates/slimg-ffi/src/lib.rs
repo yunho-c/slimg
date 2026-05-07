@@ -13,6 +13,24 @@ pub enum Format {
     Qoi,
 }
 
+/// Palette quantization mode for PNG encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PngPaletteMode {
+    Off,
+    Auto,
+    On,
+}
+
+impl PngPaletteMode {
+    fn to_core(self) -> slimg_core::PngPaletteMode {
+        match self {
+            PngPaletteMode::Off => slimg_core::PngPaletteMode::Off,
+            PngPaletteMode::Auto => slimg_core::PngPaletteMode::Auto,
+            PngPaletteMode::On => slimg_core::PngPaletteMode::On,
+        }
+    }
+}
+
 impl Format {
     fn to_core(self) -> slimg_core::Format {
         match self {
@@ -176,6 +194,8 @@ pub struct PipelineOptions {
     pub quality: u8,
     /// Optional encoder effort (0-100).
     pub effort: Option<u8>,
+    /// Palette quantization mode for PNG output.
+    pub png_palette: Option<PngPaletteMode>,
     /// Optional resize to apply before encoding.
     pub resize: Option<ResizeMode>,
     /// Optional crop to apply before encoding.
@@ -320,6 +340,10 @@ fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineResul
         format: options.format.to_core(),
         quality: options.quality,
         effort: options.effort,
+        png_palette: options
+            .png_palette
+            .map(PngPaletteMode::to_core)
+            .unwrap_or_default(),
         threads: None,
         resize: options.resize.as_ref().map(|r| r.to_core()),
         crop: options.crop.as_ref().map(|c| c.to_core()),
@@ -380,6 +404,7 @@ fn optimize_with_effort(
         slimg_core::EncodeOptions {
             quality,
             effort,
+            png_palette: Default::default(),
             threads: None,
         },
     )?;

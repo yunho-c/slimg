@@ -55,6 +55,7 @@ fn bench_codec(c: &mut Criterion) {
     let options = EncodeOptions {
         quality: BENCH_QUALITY,
         effort: None,
+        png_palette: Default::default(),
         threads: None,
     };
     let pixel_count = u64::from(fixture.width) * u64::from(fixture.height);

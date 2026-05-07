@@ -137,6 +137,7 @@ pub fn run(args: ExtendArgs) -> anyhow::Result<()> {
                 format: target_format,
                 quality: args.quality,
                 effort: args.effort,
+                png_palette: Default::default(),
                 threads: None,
                 resize: None,
                 crop: None,

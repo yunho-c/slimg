@@ -64,6 +64,7 @@ mod tests {
         let options = EncodeOptions {
             quality: 90,
             effort: None,
+            png_palette: Default::default(),
             threads: None,
         };
 
@@ -100,6 +101,7 @@ mod tests {
                 &EncodeOptions {
                     quality: 95,
                     effort: None,
+                    png_palette: Default::default(),
                     threads: None,
                 },
             )
@@ -110,6 +112,7 @@ mod tests {
                 &EncodeOptions {
                     quality: 30,
                     effort: None,
+                    png_palette: Default::default(),
                     threads: None,
                 },
             )

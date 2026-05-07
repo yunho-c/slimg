@@ -275,6 +275,7 @@ fn measure_format(
         let options = EncodeOptions {
             quality,
             effort: None,
+            png_palette: Default::default(),
             threads: None,
         };
 

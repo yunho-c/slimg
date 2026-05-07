@@ -74,6 +74,7 @@ mod tests {
         let options = EncodeOptions {
             quality: 90,
             effort: None,
+            png_palette: Default::default(),
             threads: None,
         };
 

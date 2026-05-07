@@ -57,6 +57,8 @@ pub struct EncodeOptions {
     ///
     /// Higher values favor smaller output at the cost of slower encoding.
     pub effort: Option<u8>,
+    /// Palette quantization mode for PNG output.
+    pub png_palette: PngPaletteMode,
     /// Optional thread budget for codecs that support internal parallelism.
     pub threads: Option<usize>,
 }
@@ -66,9 +68,22 @@ impl Default for EncodeOptions {
         Self {
             quality: 80,
             effort: None,
+            png_palette: PngPaletteMode::Off,
             threads: None,
         }
     }
+}
+
+/// Palette quantization mode for PNG encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PngPaletteMode {
+    /// Encode PNGs with the existing lossless RGBA pipeline.
+    #[default]
+    Off,
+    /// Use palette output only when conservative size and quality checks pass.
+    Auto,
+    /// Force palette output for PNGs.
+    On,
 }
 
 /// Trait implemented by each image codec (JPEG, PNG, WebP, etc.).
@@ -114,6 +129,7 @@ mod tests {
         let opts = EncodeOptions::default();
         assert_eq!(opts.quality, 80);
         assert_eq!(opts.effort, None);
+        assert_eq!(opts.png_palette, PngPaletteMode::Off);
         assert_eq!(opts.threads, None);
     }
 

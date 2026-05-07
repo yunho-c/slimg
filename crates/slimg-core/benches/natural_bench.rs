@@ -141,6 +141,7 @@ fn bench_encode_natural(c: &mut Criterion, corpus: &NaturalCorpus, encode_cases:
     let options = EncodeOptions {
         quality: NATURAL_BENCH_QUALITY,
         effort: None,
+        png_palette: Default::default(),
         threads: None,
     };
     let mut group = c.benchmark_group("encode");
@@ -221,6 +222,7 @@ fn build_encode_cases(corpus: &NaturalCorpus) -> Vec<EncodeCase> {
                             &EncodeOptions {
                                 quality: NATURAL_BENCH_QUALITY,
                                 effort: None,
+                                png_palette: Default::default(),
                                 threads: None,
                             },
                         )
@@ -265,6 +267,7 @@ fn build_convert_cases(corpus: &NaturalCorpus) -> Vec<ConvertCase> {
                             format: dst_format,
                             quality: NATURAL_BENCH_QUALITY,
                             effort: None,
+                            png_palette: Default::default(),
                             threads: None,
                             resize: None,
                             crop: None,
@@ -282,6 +285,7 @@ fn build_convert_cases(corpus: &NaturalCorpus) -> Vec<ConvertCase> {
                 format: dst_format,
                 quality: NATURAL_BENCH_QUALITY,
                 effort: None,
+                png_palette: Default::default(),
                 threads: None,
                 resize: None,
                 crop: None,
@@ -431,6 +435,7 @@ fn encode_image(image: &ImageData, format: Format, quality: u8) -> Vec<u8> {
             &EncodeOptions {
                 quality,
                 effort: None,
+                png_palette: Default::default(),
                 threads: None,
             },
         )

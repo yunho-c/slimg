@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::codec::{EncodeOptions, ImageData, get_codec};
+use crate::codec::{EncodeOptions, ImageData, PngPaletteMode, get_codec};
 use crate::crop::{self, CropMode};
 use crate::error::{Error, Result};
 use crate::extend::{self, ExtendMode, FillColor};
@@ -19,6 +19,8 @@ pub struct PipelineOptions {
     ///
     /// Higher values favor smaller output at the cost of slower encoding.
     pub effort: Option<u8>,
+    /// Palette quantization mode for PNG output.
+    pub png_palette: PngPaletteMode,
     /// Optional thread budget for internally-threaded encoders.
     pub threads: Option<usize>,
     /// Optional resize to apply before encoding.
@@ -98,6 +100,7 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
     let encode_opts = EncodeOptions {
         quality: options.quality,
         effort: options.effort,
+        png_palette: options.png_palette,
         threads: options.threads,
     };
     let data = codec.encode(&image, &encode_opts)?;
@@ -126,6 +129,7 @@ pub fn optimize_with_threads(
         EncodeOptions {
             quality,
             effort: None,
+            png_palette: PngPaletteMode::Off,
             threads,
         },
     )
@@ -196,6 +200,7 @@ mod tests {
             format: Format::Jxl,
             quality: 80,
             effort: None,
+            png_palette: Default::default(),
             threads: None,
             resize: None,
             crop: None,

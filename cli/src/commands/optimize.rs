@@ -58,6 +58,7 @@ pub fn run(args: OptimizeArgs) -> anyhow::Result<()> {
                 EncodeOptions {
                     quality: args.quality,
                     effort: args.effort,
+                    png_palette: Default::default(),
                     threads: None,
                 },
             )?;

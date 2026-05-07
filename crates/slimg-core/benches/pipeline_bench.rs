@@ -17,6 +17,7 @@ fn pre_encode(image: &ImageData, format: Format, quality: u8) -> Vec<u8> {
     let options = EncodeOptions {
         quality,
         effort: None,
+        png_palette: Default::default(),
         threads: None,
     };
     codec.encode(image, &options).unwrap()
@@ -158,6 +159,7 @@ fn build_convert_cases(image: &ImageData) -> Vec<ConvertCase> {
                 format: dst_format,
                 quality: BENCH_QUALITY,
                 effort: None,
+                png_palette: Default::default(),
                 threads: None,
                 resize: None,
                 crop: None,

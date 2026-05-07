@@ -66,6 +66,7 @@ pub fn run(args: ResizeArgs) -> anyhow::Result<()> {
         format: target_format,
         quality: args.quality,
         effort: args.effort,
+        png_palette: Default::default(),
         threads: None,
         resize: Some(resize_mode),
         crop: None,
