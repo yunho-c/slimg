@@ -24,11 +24,14 @@ impl Codec for WebPCodec {
 
     fn encode(&self, image: &ImageData, options: &EncodeOptions) -> Result<Vec<u8>> {
         let encoder = webp::Encoder::from_rgba(&image.data, image.width, image.height);
-        let encoded = if let Some(effort) = options.effort {
+        let lossless = options.quality >= 100;
+        let encoded = if lossless || options.effort.is_some() {
             let mut config = webp::WebPConfig::new()
                 .map_err(|error| Error::Encode(format!("webp config init: {error:?}")))?;
+            config.lossless = if lossless { 1 } else { 0 };
+            config.exact = if lossless { 1 } else { 0 };
             config.quality = options.quality as f32;
-            config.method = effort_to_webp_method(effort);
+            config.method = effort_to_webp_method(options.effort.unwrap_or(50));
             encoder
                 .encode_advanced(&config)
                 .map_err(|error| Error::Encode(format!("webp encode: {error:?}")))?
@@ -68,10 +71,25 @@ mod tests {
         ImageData::new(width, height, data)
     }
 
+    fn create_alpha_test_image(width: u32, height: u32) -> ImageData {
+        let size = (width * height * 4) as usize;
+        let mut data = vec![0u8; size];
+        for y in 0..height {
+            for x in 0..width {
+                let i = ((y * width + x) * 4) as usize;
+                data[i] = ((x * 17 + y * 3) % 256) as u8;
+                data[i + 1] = ((x * 5 + y * 19) % 256) as u8;
+                data[i + 2] = ((x * 11 + y * 7) % 256) as u8;
+                data[i + 3] = ((x * 13 + y * 23) % 256) as u8;
+            }
+        }
+        ImageData::new(width, height, data)
+    }
+
     #[test]
     fn encode_and_decode_roundtrip() {
         let codec = WebPCodec;
-        let original = create_test_image(64, 48);
+        let original = create_alpha_test_image(64, 48);
         let options = EncodeOptions {
             quality: 90,
             effort: None,
@@ -125,5 +143,45 @@ mod tests {
             low.len(),
             high.len(),
         );
+    }
+
+    #[test]
+    fn max_quality_encodes_losslessly_without_effort() {
+        let codec = WebPCodec;
+        let original = create_alpha_test_image(64, 48);
+        let encoded = codec
+            .encode(
+                &original,
+                &EncodeOptions {
+                    quality: 100,
+                    effort: None,
+                    png_palette: Default::default(),
+                    threads: None,
+                },
+            )
+            .expect("encode q100 failed");
+
+        let decoded = codec.decode(&encoded).expect("decode q100 failed");
+        assert_eq!(decoded.data, original.data);
+    }
+
+    #[test]
+    fn max_quality_encodes_losslessly_with_effort() {
+        let codec = WebPCodec;
+        let original = create_alpha_test_image(64, 48);
+        let encoded = codec
+            .encode(
+                &original,
+                &EncodeOptions {
+                    quality: 100,
+                    effort: Some(50),
+                    png_palette: Default::default(),
+                    threads: None,
+                },
+            )
+            .expect("encode q100 failed");
+
+        let decoded = codec.decode(&encoded).expect("decode q100 failed");
+        assert_eq!(decoded.data, original.data);
     }
 }
