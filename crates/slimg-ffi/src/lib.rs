@@ -13,6 +13,24 @@ pub enum Format {
     Qoi,
 }
 
+/// Palette quantization mode for PNG encoding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
+pub enum PngPaletteMode {
+    Off,
+    Auto,
+    On,
+}
+
+impl PngPaletteMode {
+    fn to_core(self) -> slimg_core::PngPaletteMode {
+        match self {
+            PngPaletteMode::Off => slimg_core::PngPaletteMode::Off,
+            PngPaletteMode::Auto => slimg_core::PngPaletteMode::Auto,
+            PngPaletteMode::On => slimg_core::PngPaletteMode::On,
+        }
+    }
+}
+
 impl Format {
     fn to_core(self) -> slimg_core::Format {
         match self {
@@ -71,7 +89,12 @@ impl ResizeMode {
 #[derive(Debug, Clone, uniffi::Enum)]
 pub enum CropMode {
     /// Extract a specific region.
-    Region { x: u32, y: u32, width: u32, height: u32 },
+    Region {
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    },
     /// Crop to an aspect ratio (centered).
     AspectRatio { width: u32, height: u32 },
 }
@@ -79,11 +102,20 @@ pub enum CropMode {
 impl CropMode {
     fn to_core(&self) -> slimg_core::CropMode {
         match self {
-            CropMode::Region { x, y, width, height } => slimg_core::CropMode::Region {
-                x: *x, y: *y, width: *width, height: *height,
+            CropMode::Region {
+                x,
+                y,
+                width,
+                height,
+            } => slimg_core::CropMode::Region {
+                x: *x,
+                y: *y,
+                width: *width,
+                height: *height,
             },
             CropMode::AspectRatio { width, height } => slimg_core::CropMode::AspectRatio {
-                width: *width, height: *height,
+                width: *width,
+                height: *height,
             },
         }
     }
@@ -160,6 +192,10 @@ pub struct PipelineOptions {
     pub format: Format,
     /// Encoding quality (0-100).
     pub quality: u8,
+    /// Optional encoder effort (0-100).
+    pub effort: Option<u8>,
+    /// Palette quantization mode for PNG output.
+    pub png_palette: Option<PngPaletteMode>,
     /// Optional resize to apply before encoding.
     pub resize: Option<ResizeMode>,
     /// Optional crop to apply before encoding.
@@ -303,6 +339,12 @@ fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineResul
     let core_options = slimg_core::PipelineOptions {
         format: options.format.to_core(),
         quality: options.quality,
+        effort: options.effort,
+        png_palette: options
+            .png_palette
+            .map(PngPaletteMode::to_core)
+            .unwrap_or_default(),
+        threads: None,
         resize: options.resize.as_ref().map(|r| r.to_core()),
         crop: options.crop.as_ref().map(|c| c.to_core()),
         extend: options.extend.as_ref().map(|e| e.to_core()),
@@ -342,6 +384,30 @@ fn resize(image: &ImageData, mode: &ResizeMode) -> Result<ImageData, SlimgError>
 #[uniffi::export]
 fn optimize(data: Vec<u8>, quality: u8) -> Result<PipelineResult, SlimgError> {
     let result = slimg_core::optimize(&data, quality)?;
+    Ok(PipelineResult {
+        data: result.data,
+        format: Format::from_core(result.format),
+        width: result.width,
+        height: result.height,
+    })
+}
+
+/// Decode the data and re-encode in the same format with an optional effort.
+#[uniffi::export]
+fn optimize_with_effort(
+    data: Vec<u8>,
+    quality: u8,
+    effort: Option<u8>,
+) -> Result<PipelineResult, SlimgError> {
+    let result = slimg_core::optimize_with_options(
+        &data,
+        slimg_core::EncodeOptions {
+            quality,
+            effort,
+            png_palette: Default::default(),
+            threads: None,
+        },
+    )?;
     Ok(PipelineResult {
         data: result.data,
         format: Format::from_core(result.format),

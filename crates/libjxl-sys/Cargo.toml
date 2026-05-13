@@ -17,10 +17,12 @@ include = [
 [features]
 default = ["vendored"]
 vendored = ["dep:cmake", "dep:bindgen"]
+jpegli = ["vendored", "dep:cc"]
 
 [build-dependencies]
 cmake = { version = "0.1", optional = true }
 bindgen = { version = "0.71", optional = true }
+cc = { version = "1", optional = true }
 
 [package.metadata.docs.rs]
 no-default-features = true

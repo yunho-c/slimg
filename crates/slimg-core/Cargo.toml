@@ -10,20 +10,33 @@ readme = "README.md"
 keywords = ["image", "optimization", "compression", "webp", "avif"]
 categories = ["multimedia::images", "encoding"]
 
+[features]
+default = ["jpeg-backend-mozjpeg"]
+jpeg-backend-mozjpeg = ["dep:mozjpeg"]
+jpeg-backend-jpegli = ["libjxl-sys/jpegli"]
+pngquant = ["dep:imagequant", "dep:png"]
+
 [dependencies]
-image = { version = "0.25", features = ["avif-native"] }
+image = { version = "0.25", default-features = false, features = ["png", "webp"] }
+imagequant = { version = "4.4.1", default-features = false, optional = true }
 libjxl-sys = { version = "0.1", path = "../libjxl-sys", package = "slimg-libjxl-sys" }
-mozjpeg = "0.10"
+mozjpeg = { version = "0.10", optional = true }
 oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
+png = { version = "0.18", optional = true }
 imgref = "1"
 rapid-qoi = "0.6"
 ravif = "0.13"
 rgb = "0.8"
 thiserror = "2"
 webp = { version = "0.3", default-features = false }
+zenavif = "0.1.5"
+zenpixels-convert = { version = "0.2", features = ["rgb"] }
 
 [dev-dependencies]
 criterion = "0.5"
+plotters = { version = "0.3", default-features = false, features = ["svg_backend", "line_series"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [[bench]]
 name = "codec_bench"
@@ -31,4 +44,8 @@ harness = false
 
 [[bench]]
 name = "pipeline_bench"
+harness = false
+
+[[bench]]
+name = "natural_bench"
 harness = false

@@ -30,6 +30,10 @@ pub struct CropArgs {
     #[arg(short, long, default_value_t = 80)]
     pub quality: u8,
 
+    /// Encoding effort (0-100, higher is slower/smaller)
+    #[arg(short, long)]
+    pub effort: Option<u8>,
+
     /// Output path (file or directory)
     #[arg(short, long)]
     pub output: Option<PathBuf>,
@@ -91,7 +95,10 @@ fn build_crop_mode(args: &CropArgs) -> anyhow::Result<CropMode> {
             width: w,
             height: h,
         }),
-        (None, Some((w, h))) => Ok(CropMode::AspectRatio { width: w, height: h }),
+        (None, Some((w, h))) => Ok(CropMode::AspectRatio {
+            width: w,
+            height: h,
+        }),
         _ => anyhow::bail!("specify exactly one of --region or --aspect"),
     }
 }
@@ -124,6 +131,9 @@ pub fn run(args: CropArgs) -> anyhow::Result<()> {
             let options = PipelineOptions {
                 format: target_format,
                 quality: args.quality,
+                effort: args.effort,
+                png_palette: Default::default(),
+                threads: None,
                 resize: None,
                 crop: Some(crop_mode.clone()),
                 extend: None,

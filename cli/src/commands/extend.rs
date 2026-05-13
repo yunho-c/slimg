@@ -6,8 +6,8 @@ use rayon::prelude::*;
 use slimg_core::{ExtendMode, FillColor, PipelineOptions, convert, decode_file, output_path};
 
 use super::{
-    ErrorCollector, FormatArg, collect_files, configure_thread_pool, make_progress_bar,
-    parse_size, safe_write,
+    ErrorCollector, FormatArg, collect_files, configure_thread_pool, make_progress_bar, parse_size,
+    safe_write,
 };
 
 #[derive(Debug, Args)]
@@ -39,6 +39,10 @@ pub struct ExtendArgs {
     /// Encoding quality (0-100)
     #[arg(short, long, default_value_t = 80)]
     pub quality: u8,
+
+    /// Encoding effort (0-100, higher is slower/smaller)
+    #[arg(short, long)]
+    pub effort: Option<u8>,
 
     /// Output path (file or directory)
     #[arg(short, long)]
@@ -75,8 +79,14 @@ fn parse_hex_color(s: &str) -> anyhow::Result<[u8; 4]> {
 
 fn build_extend_mode(args: &ExtendArgs) -> anyhow::Result<ExtendMode> {
     match (args.aspect, args.size) {
-        (Some((w, h)), None) => Ok(ExtendMode::AspectRatio { width: w, height: h }),
-        (None, Some((w, h))) => Ok(ExtendMode::Size { width: w, height: h }),
+        (Some((w, h)), None) => Ok(ExtendMode::AspectRatio {
+            width: w,
+            height: h,
+        }),
+        (None, Some((w, h))) => Ok(ExtendMode::Size {
+            width: w,
+            height: h,
+        }),
         _ => anyhow::bail!("specify exactly one of --aspect or --size"),
     }
 }
@@ -84,9 +94,7 @@ fn build_extend_mode(args: &ExtendArgs) -> anyhow::Result<ExtendMode> {
 fn build_fill_color(args: &ExtendArgs, format: slimg_core::Format) -> anyhow::Result<FillColor> {
     if args.transparent {
         if format == slimg_core::Format::Jpeg {
-            eprintln!(
-                "warning: JPEG does not support transparency, using white background"
-            );
+            eprintln!("warning: JPEG does not support transparency, using white background");
             return Ok(FillColor::Solid([255, 255, 255, 255]));
         }
         return Ok(FillColor::Transparent);
@@ -128,6 +136,9 @@ pub fn run(args: ExtendArgs) -> anyhow::Result<()> {
             let options = PipelineOptions {
                 format: target_format,
                 quality: args.quality,
+                effort: args.effort,
+                png_palette: Default::default(),
+                threads: None,
                 resize: None,
                 crop: None,
                 extend: Some(extend_mode.clone()),

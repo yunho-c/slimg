@@ -6,12 +6,29 @@ Image optimization library for Rust. Decode, encode, convert, and resize images 
 
 | Format | Decode | Encode | Encoder |
 |--------|--------|--------|---------|
-| JPEG | Yes | Yes | MozJPEG |
+| JPEG | Yes | Yes | MozJPEG by default; optional `jpeg-backend-jpegli` feature |
 | PNG | Yes | Yes | OxiPNG (Zopfli) |
 | WebP | Yes | Yes | libwebp |
-| AVIF | macOS only | Yes | ravif (AV1) |
+| AVIF | Yes | Yes | zenavif decode; ravif encode (AV1) |
 | QOI | Yes | Yes | rapid-qoi |
-| JPEG XL | Yes | No | Decode only (GPL restriction) |
+| JPEG XL | Yes | Yes | libjxl |
+
+## JPEG Backends
+
+`slimg-core` uses `mozjpeg` by default:
+
+```bash
+cargo test -p slimg-core
+```
+
+To test or build the experimental `jpegli` backend, disable default features and enable `jpeg-backend-jpegli`:
+
+```bash
+git submodule update --init --recursive
+cargo test -p slimg-core --no-default-features --features jpeg-backend-jpegli
+```
+
+The `jpegli` backend currently requires the vendored `libjxl` source tree and is not supported through the prebuilt `slimg-libjxl-sys` archive path.
 
 ## Usage
 
@@ -26,7 +43,12 @@ let (image, format) = decode_file(Path::new("photo.jpg"))?;
 let result = convert(&image, &PipelineOptions {
     format: Format::WebP,
     quality: 80,
+    effort: None,
+    threads: None,
     resize: None,
+    crop: None,
+    extend: None,
+    fill_color: None,
 })?;
 result.save(Path::new("photo.webp"))?;
 
@@ -34,12 +56,21 @@ result.save(Path::new("photo.webp"))?;
 let result = convert(&image, &PipelineOptions {
     format: Format::Avif,
     quality: 60,
+    effort: Some(75),
+    threads: None,
     resize: Some(ResizeMode::Width(800)),
+    crop: None,
+    extend: None,
+    fill_color: None,
 })?;
 
 // Optimize in-place (re-encode same format)
 let data = std::fs::read("photo.jpg")?;
-let optimized = optimize(&data, 75)?;
+let optimized = optimize_with_options(&data, EncodeOptions {
+    quality: 75,
+    effort: Some(75),
+    threads: None,
+})?;
 optimized.save(Path::new("photo.jpg"))?;
 ```
 

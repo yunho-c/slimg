@@ -22,7 +22,8 @@ impl Codec for JxlCodec {
     }
 
     fn encode(&self, image: &ImageData, options: &EncodeOptions) -> Result<Vec<u8>> {
-        let config = types::EncodeConfig::from_quality(options.quality);
+        let config =
+            types::EncodeConfig::from_options(options.quality, options.effort, options.threads);
         let mut enc = encoder::Encoder::new()?;
         enc.encode_rgba(&image.data, image.width, image.height, &config)
     }
@@ -50,9 +51,16 @@ mod tests {
     fn encode_lossy_produces_valid_jxl() {
         let codec = JxlCodec;
         let image = create_test_image(8, 8);
-        let options = EncodeOptions { quality: 80 };
+        let options = EncodeOptions {
+            quality: 80,
+            effort: None,
+            png_palette: Default::default(),
+            threads: None,
+        };
 
-        let encoded = codec.encode(&image, &options).expect("encode should succeed");
+        let encoded = codec
+            .encode(&image, &options)
+            .expect("encode should succeed");
         assert!(!encoded.is_empty(), "encoded data should not be empty");
 
         // Check JXL magic bytes (bare codestream: 0xFF 0x0A)
@@ -69,9 +77,16 @@ mod tests {
     fn encode_lossless_produces_valid_jxl() {
         let codec = JxlCodec;
         let image = create_test_image(8, 8);
-        let options = EncodeOptions { quality: 100 };
+        let options = EncodeOptions {
+            quality: 100,
+            effort: None,
+            png_palette: Default::default(),
+            threads: None,
+        };
 
-        let encoded = codec.encode(&image, &options).expect("lossless encode should succeed");
+        let encoded = codec
+            .encode(&image, &options)
+            .expect("lossless encode should succeed");
         assert!(!encoded.is_empty());
     }
 
@@ -79,7 +94,12 @@ mod tests {
     fn roundtrip_lossy() {
         let codec = JxlCodec;
         let original = create_test_image(16, 16);
-        let options = EncodeOptions { quality: 90 };
+        let options = EncodeOptions {
+            quality: 90,
+            effort: None,
+            png_palette: Default::default(),
+            threads: None,
+        };
 
         let encoded = codec.encode(&original, &options).expect("encode failed");
         let decoded = codec.decode(&encoded).expect("decode failed");
@@ -93,7 +113,12 @@ mod tests {
     fn roundtrip_lossless() {
         let codec = JxlCodec;
         let original = create_test_image(4, 4);
-        let options = EncodeOptions { quality: 100 };
+        let options = EncodeOptions {
+            quality: 100,
+            effort: None,
+            png_palette: Default::default(),
+            threads: None,
+        };
 
         let encoded = codec.encode(&original, &options).expect("encode failed");
         let decoded = codec.decode(&encoded).expect("decode failed");
@@ -101,8 +126,7 @@ mod tests {
         assert_eq!(decoded.width, original.width);
         assert_eq!(decoded.height, original.height);
         assert_eq!(
-            decoded.data,
-            original.data,
+            decoded.data, original.data,
             "lossless roundtrip should produce identical pixels"
         );
     }
