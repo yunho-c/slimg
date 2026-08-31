@@ -151,6 +151,10 @@ The sweep includes:
 
 If you run `just bench-natural-sweep-jpegli`, the `JPEG` curve uses the `jpegli` JPEG backend, while `JXL` remains actual JPEG XL.
 
+JXL benchmark and sweep labels include the observed encoder backend and any
+fallback reason. A corpus run aborts if its JXL samples mix GJXL and libjxl, so
+an experimental GJXL measurement cannot silently include fallback samples.
+
 Outputs:
 
 - `target/criterion/slimg-metrics/natural_resolution_sweep.json`

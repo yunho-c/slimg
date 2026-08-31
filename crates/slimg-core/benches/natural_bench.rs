@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_main};
 use serde::Serialize;
+use slimg_core::codec::jxl::{
+    JxlEncodeBackend, JxlEncodeOutcome, JxlFallbackReason, encode_with_diagnostics,
+};
 use slimg_core::codec::{EncodeOptions, get_codec};
 use slimg_core::{Format, ImageData, PipelineOptions, convert, decode_file, optimize};
 
@@ -45,9 +48,12 @@ struct NaturalCorpus {
 #[derive(Debug)]
 struct EncodeCase {
     format: Format,
-    label: &'static str,
+    label: String,
     metrics: CompressionMetrics,
+    jxl_diagnostics: Option<JxlDiagnostic>,
 }
+
+type JxlDiagnostic = (JxlEncodeBackend, Option<JxlFallbackReason>);
 
 #[derive(Debug)]
 struct ConvertCase {
@@ -150,12 +156,21 @@ fn bench_encode_natural(c: &mut Criterion, corpus: &NaturalCorpus, encode_cases:
     for case in encode_cases {
         let codec = get_codec(case.format);
         group.bench_with_input(
-            BenchmarkId::from_parameter(case.label),
+            BenchmarkId::from_parameter(&case.label),
             &(&corpus.images, &options),
             |b, &(images, options)| {
                 b.iter(|| {
                     for image in images {
-                        codec.encode(&image.image, options).unwrap();
+                        if let Some(expected) = &case.jxl_diagnostics {
+                            let outcome = encode_with_diagnostics(&image.image, options).unwrap();
+                            assert_eq!(
+                                &(outcome.backend, outcome.fallback_reason),
+                                expected,
+                                "timed JXL encode changed backend or fallback reason"
+                            );
+                        } else {
+                            codec.encode(&image.image, options).unwrap();
+                        }
                     }
                 });
             },
@@ -212,33 +227,59 @@ fn build_encode_cases(corpus: &NaturalCorpus) -> Vec<EncodeCase> {
         .into_iter()
         .map(|format| {
             let codec = get_codec(format);
+            let mut jxl_diagnostics = None;
             let total_encoded_bytes = corpus
                 .images
                 .iter()
                 .map(|image| {
-                    codec
-                        .encode(
-                            &image.image,
-                            &EncodeOptions {
-                                quality: NATURAL_BENCH_QUALITY,
-                                effort: None,
-                                png_palette: Default::default(),
-                                threads: None,
-                            },
-                        )
-                        .unwrap()
-                        .len() as u64
+                    let options = EncodeOptions {
+                        quality: NATURAL_BENCH_QUALITY,
+                        effort: None,
+                        png_palette: Default::default(),
+                        threads: None,
+                    };
+                    if format == Format::Jxl {
+                        let outcome = encode_with_diagnostics(&image.image, &options).unwrap();
+                        assert_consistent_jxl_backend(&mut jxl_diagnostics, &outcome);
+                        outcome.data.len() as u64
+                    } else {
+                        codec.encode(&image.image, &options).unwrap().len() as u64
+                    }
                 })
                 .sum::<u64>();
             let metrics = aggregate_compression_metrics(&corpus.info, total_encoded_bytes);
+            let label = jxl_diagnostics
+                .as_ref()
+                .map(jxl_diagnostic_label)
+                .unwrap_or_else(|| format_label(format).to_string());
 
             EncodeCase {
                 format,
-                label: format_label(format),
+                label,
                 metrics,
+                jxl_diagnostics,
             }
         })
         .collect()
+}
+
+fn assert_consistent_jxl_backend(expected: &mut Option<JxlDiagnostic>, outcome: &JxlEncodeOutcome) {
+    let observed = (outcome.backend, outcome.fallback_reason.clone());
+    if let Some(expected) = expected {
+        assert_eq!(
+            *expected, observed,
+            "JXL benchmark corpus mixed encoder backends or fallback reasons"
+        );
+    } else {
+        *expected = Some(observed);
+    }
+}
+
+fn jxl_diagnostic_label(diagnostic: &JxlDiagnostic) -> String {
+    match diagnostic {
+        (JxlEncodeBackend::Gjxl, None) => "JXL/GJXL".into(),
+        (backend, reason) => format!("JXL/{backend:?}/{reason:?}"),
+    }
 }
 
 fn build_convert_cases(corpus: &NaturalCorpus) -> Vec<ConvertCase> {

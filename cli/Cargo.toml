@@ -14,6 +14,7 @@ categories = ["multimedia::images", "command-line-utilities"]
 default = ["jpeg-backend-mozjpeg"]
 jpeg-backend-mozjpeg = ["slimg-core/jpeg-backend-mozjpeg"]
 jpeg-backend-jpegli = ["slimg-core/jpeg-backend-jpegli"]
+jxl-encoder-gjxl = ["slimg-core/jxl-encoder-gjxl"]
 
 [dependencies]
 slimg-core = { version = "0.5.1", path = "../crates/slimg-core", default-features = false }

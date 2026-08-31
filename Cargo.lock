@@ -820,6 +820,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "gjxl"
+version = "0.0.1"
+dependencies = [
+ "gjxl-sys",
+]
+
+[[package]]
+name = "gjxl-sys"
+version = "0.0.1"
+dependencies = [
+ "bindgen",
+ "cmake",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1887,6 +1902,7 @@ name = "slimg-core"
 version = "0.5.1"
 dependencies = [
  "criterion",
+ "gjxl",
  "image",
  "imagequant",
  "imgref",

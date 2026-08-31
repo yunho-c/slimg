@@ -7,9 +7,12 @@ use std::time::{Duration, Instant};
 
 use plotters::prelude::*;
 use serde::Serialize;
+use slimg_core::codec::jxl::{
+    JxlEncodeBackend, JxlEncodeOutcome, JxlFallbackReason, encode_with_diagnostics,
+};
 use slimg_core::codec::{EncodeOptions, get_codec};
 use slimg_core::resize::{ResizeMode, resize};
-use slimg_core::{Format, ImageData, decode_file};
+use slimg_core::{Codec, Format, ImageData, decode_file};
 
 const NATURAL_BENCH_ENV: &str = "SLIMG_BENCH_NATURAL_DIR";
 const NATURAL_BENCH_DEFAULT_REPO: &str =
@@ -268,7 +271,7 @@ fn measure_format(
     corpora: &[ResizedCorpus],
 ) -> Result<CodecSeries, Box<dyn std::error::Error>> {
     let codec = get_codec(format);
-    let label = format_label(format).to_string();
+    let mut jxl_diagnostics = None;
     let mut points = Vec::with_capacity(corpora.len());
 
     for corpus in corpora {
@@ -280,7 +283,13 @@ fn measure_format(
         };
 
         for image in &corpus.images {
-            let encoded = codec.encode(image, &options)?;
+            let encoded = encode_for_sweep(
+                codec.as_ref(),
+                format,
+                image,
+                &options,
+                &mut jxl_diagnostics,
+            )?;
             black_box(encoded.len());
         }
 
@@ -291,7 +300,13 @@ fn measure_format(
             let start = Instant::now();
             let mut total_encoded_bytes = 0u64;
             for image in &corpus.images {
-                let encoded = codec.encode(image, &options)?;
+                let encoded = encode_for_sweep(
+                    codec.as_ref(),
+                    format,
+                    image,
+                    &options,
+                    &mut jxl_diagnostics,
+                )?;
                 total_encoded_bytes += encoded.len() as u64;
                 black_box(encoded);
             }
@@ -323,7 +338,48 @@ fn measure_format(
         });
     }
 
+    let label = jxl_diagnostics
+        .as_ref()
+        .map(jxl_diagnostic_label)
+        .unwrap_or_else(|| format_label(format).to_string());
     Ok(CodecSeries { label, points })
+}
+
+type JxlDiagnostic = (JxlEncodeBackend, Option<JxlFallbackReason>);
+
+fn encode_for_sweep(
+    codec: &dyn Codec,
+    format: Format,
+    image: &ImageData,
+    options: &EncodeOptions,
+    expected: &mut Option<JxlDiagnostic>,
+) -> slimg_core::Result<Vec<u8>> {
+    if format != Format::Jxl {
+        return codec.encode(image, options);
+    }
+
+    let outcome = encode_with_diagnostics(image, options)?;
+    assert_consistent_jxl_backend(expected, &outcome);
+    Ok(outcome.data)
+}
+
+fn assert_consistent_jxl_backend(expected: &mut Option<JxlDiagnostic>, outcome: &JxlEncodeOutcome) {
+    let observed = (outcome.backend, outcome.fallback_reason.clone());
+    if let Some(expected) = expected {
+        assert_eq!(
+            *expected, observed,
+            "JXL sweep mixed encoder backends or fallback reasons"
+        );
+    } else {
+        *expected = Some(observed);
+    }
+}
+
+fn jxl_diagnostic_label(diagnostic: &JxlDiagnostic) -> String {
+    match diagnostic {
+        (JxlEncodeBackend::Gjxl, None) => "JXL/GJXL".into(),
+        (backend, reason) => format!("JXL/{backend:?}/{reason:?}"),
+    }
 }
 
 fn median_duration(durations: &mut [Duration]) -> Duration {

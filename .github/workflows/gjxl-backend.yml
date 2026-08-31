@@ -1,0 +1,56 @@
+name: Experimental GJXL Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'cli/Cargo.toml'
+      - 'crates/slimg-core/**'
+      - '.github/workflows/gjxl-backend.yml'
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'cli/Cargo.toml'
+      - 'crates/slimg-core/**'
+      - '.github/workflows/gjxl-backend.yml'
+  workflow_dispatch:
+
+env:
+  SYSTEM_DEPS_DAV1D_BUILD_INTERNAL: always
+
+jobs:
+  test:
+    name: macOS source integration
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Slimg
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout GJXL Rust wrapper
+        uses: actions/checkout@v4
+        with:
+          repository: yunho-c/gjxl
+          ref: feat/rust
+          path: gjxl-source
+          submodules: recursive
+
+      - name: Expose sibling GJXL worktree path
+        run: ln -s "$GITHUB_WORKSPACE/gjxl-source" "$GITHUB_WORKSPACE/../gjxl-rust"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install build tools
+        run: brew install cmake meson nasm ninja
+
+      - name: Test GJXL-enabled slimg-core
+        run: cargo test -p slimg-core --features jxl-encoder-gjxl --lib codec::jxl
+
+      - name: Check CLI feature relay
+        run: cargo check -p slimg --features jxl-encoder-gjxl

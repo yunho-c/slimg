@@ -11,7 +11,7 @@ Image optimization library for Rust. Decode, encode, convert, and resize images 
 | WebP | Yes | Yes | libwebp |
 | AVIF | Yes | Yes | zenavif decode; ravif encode (AV1) |
 | QOI | Yes | Yes | rapid-qoi |
-| JPEG XL | Yes | Yes | libjxl |
+| JPEG XL | Yes | Yes | libjxl; optional experimental GJXL encoder |
 
 ## JPEG Backends
 
@@ -29,6 +29,26 @@ cargo test -p slimg-core --no-default-features --features jpeg-backend-jpegli
 ```
 
 The `jpegli` backend currently requires the vendored `libjxl` source tree and is not supported through the prebuilt `slimg-libjxl-sys` archive path.
+
+## Experimental GJXL Encoder
+
+On macOS, JPEG XL encoding can opt into GJXL's experimental C API while
+retaining libjxl for decoding and unsupported encode requests. During the
+experimental local integration, keep GJXL checked out beside Slimg, then
+enable the feature:
+
+```bash
+cargo test -p slimg-core --features jxl-encoder-gjxl
+```
+
+The feature only supports macOS builds. It uses GJXL's `AUTO` execution policy
+and falls back to libjxl for lossless, alpha, an explicit thread budget, or an
+unsupported/unavailable GJXL request. Other GJXL failures remain errors.
+
+Experiments and benchmarks should call
+`slimg_core::codec::jxl::encode_with_diagnostics` and record its backend and
+fallback reason. The ordinary `Codec::encode` interface intentionally returns
+only the encoded bytes.
 
 ## Usage
 

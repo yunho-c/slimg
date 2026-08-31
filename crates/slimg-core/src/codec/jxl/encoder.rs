@@ -190,7 +190,7 @@ impl Encoder {
     }
 }
 
-fn effort_to_jxl_effort(effort: u8) -> u8 {
+pub(super) fn effort_to_jxl_effort(effort: u8) -> u8 {
     let effort = effort.min(100) as u16;
     if effort <= 50 {
         (1 + (effort * 6 + 25) / 50) as u8

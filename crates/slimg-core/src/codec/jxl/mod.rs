@@ -1,13 +1,52 @@
 mod decoder;
 mod encoder;
+#[cfg(feature = "jxl-encoder-gjxl")]
+mod gjxl;
 mod types;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::format::Format;
 
 use super::{Codec, EncodeOptions, ImageData};
 
-/// JXL codec backed by libjxl (BSD-3-Clause) for both encoding and decoding.
+/// Encoder implementation that produced a JPEG XL codestream.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JxlEncodeBackend {
+    /// The experimental GJXL C API.
+    Gjxl,
+    /// The established libjxl encoder.
+    Libjxl,
+}
+
+/// Why an encode used libjxl instead of the optional GJXL backend.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JxlFallbackReason {
+    /// Slimg was built without the experimental GJXL feature.
+    FeatureDisabled,
+    /// Quality 100 requests lossless output, which GJXL does not support yet.
+    Lossless,
+    /// The image contains at least one non-opaque alpha sample.
+    NonOpaqueAlpha,
+    /// A thread budget was requested, which GJXL cannot currently honor.
+    ThreadBudget,
+    /// GJXL reported that the requested capability is unsupported.
+    Unsupported(String),
+    /// GJXL could not initialize its requested execution backend.
+    Unavailable(String),
+}
+
+/// Encoded JPEG XL bytes together with backend-selection diagnostics.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JxlEncodeOutcome {
+    /// Encoded JPEG XL bytes.
+    pub data: Vec<u8>,
+    /// Encoder that produced `data`.
+    pub backend: JxlEncodeBackend,
+    /// Reason libjxl was selected instead of an enabled GJXL backend.
+    pub fallback_reason: Option<JxlFallbackReason>,
+}
+
+/// JXL codec backed by libjxl for decoding and by the selected encoder route.
 pub struct JxlCodec;
 
 impl Codec for JxlCodec {
@@ -22,11 +61,89 @@ impl Codec for JxlCodec {
     }
 
     fn encode(&self, image: &ImageData, options: &EncodeOptions) -> Result<Vec<u8>> {
-        let config =
-            types::EncodeConfig::from_options(options.quality, options.effort, options.threads);
-        let mut enc = encoder::Encoder::new()?;
-        enc.encode_rgba(&image.data, image.width, image.height, &config)
+        Ok(encode_with_diagnostics(image, options)?.data)
     }
+}
+
+/// Encode JPEG XL while reporting whether GJXL or libjxl produced the bytes.
+///
+/// The ordinary [`Codec::encode`] path intentionally discards this diagnostic
+/// metadata. Benchmarks and experiments should use this function so a libjxl
+/// fallback cannot be mistaken for a GJXL sample.
+pub fn encode_with_diagnostics(
+    image: &ImageData,
+    options: &EncodeOptions,
+) -> Result<JxlEncodeOutcome> {
+    validate_image_layout(image)?;
+
+    #[cfg(feature = "jxl-encoder-gjxl")]
+    {
+        if let Some(reason) = gjxl_preflight_fallback(image, options) {
+            return encode_with_libjxl(image, options, Some(reason));
+        }
+
+        match gjxl::try_encode(image, options)? {
+            gjxl::GjxlAttempt::Encoded(data) => Ok(JxlEncodeOutcome {
+                data,
+                backend: JxlEncodeBackend::Gjxl,
+                fallback_reason: None,
+            }),
+            gjxl::GjxlAttempt::Fallback(reason) => encode_with_libjxl(image, options, Some(reason)),
+        }
+    }
+
+    #[cfg(not(feature = "jxl-encoder-gjxl"))]
+    encode_with_libjxl(image, options, Some(JxlFallbackReason::FeatureDisabled))
+}
+
+fn encode_with_libjxl(
+    image: &ImageData,
+    options: &EncodeOptions,
+    fallback_reason: Option<JxlFallbackReason>,
+) -> Result<JxlEncodeOutcome> {
+    let config =
+        types::EncodeConfig::from_options(options.quality, options.effort, options.threads);
+    let mut enc = encoder::Encoder::new()?;
+    let data = enc.encode_rgba(&image.data, image.width, image.height, &config)?;
+    Ok(JxlEncodeOutcome {
+        data,
+        backend: JxlEncodeBackend::Libjxl,
+        fallback_reason,
+    })
+}
+
+fn validate_image_layout(image: &ImageData) -> Result<()> {
+    let expected = (image.width as usize)
+        .checked_mul(image.height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or_else(|| Error::Encode("JXL image dimensions overflow the RGBA layout".into()))?;
+    if image.width == 0 || image.height == 0 {
+        return Err(Error::Encode("JXL image dimensions must be nonzero".into()));
+    }
+    if image.data.len() != expected {
+        return Err(Error::Encode(format!(
+            "JXL image data length mismatch: expected {expected} bytes, got {}",
+            image.data.len()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "jxl-encoder-gjxl")]
+fn gjxl_preflight_fallback(
+    image: &ImageData,
+    options: &EncodeOptions,
+) -> Option<JxlFallbackReason> {
+    if options.quality >= 100 {
+        return Some(JxlFallbackReason::Lossless);
+    }
+    if image.data.chunks_exact(4).any(|pixel| pixel[3] != 255) {
+        return Some(JxlFallbackReason::NonOpaqueAlpha);
+    }
+    if options.threads.is_some() {
+        return Some(JxlFallbackReason::ThreadBudget);
+    }
+    None
 }
 
 #[cfg(test)]
@@ -47,16 +164,123 @@ mod tests {
         ImageData::new(width, height, pixels)
     }
 
+    fn options(quality: u8) -> EncodeOptions {
+        EncodeOptions {
+            quality,
+            effort: None,
+            png_palette: Default::default(),
+            threads: None,
+        }
+    }
+
+    #[test]
+    fn effort_mapping_covers_low_default_and_high_tiers() {
+        assert_eq!(encoder::effort_to_jxl_effort(0), 1);
+        assert_eq!(encoder::effort_to_jxl_effort(50), 7);
+        assert_eq!(encoder::effort_to_jxl_effort(100), 10);
+    }
+
+    #[test]
+    fn malformed_image_layout_is_rejected_before_native_code() {
+        let mut image = create_test_image(2, 2);
+        image.data.pop();
+        let error =
+            encode_with_diagnostics(&image, &options(80)).expect_err("short RGBA data must fail");
+        assert!(error.to_string().contains("data length mismatch"));
+    }
+
+    #[cfg(not(feature = "jxl-encoder-gjxl"))]
+    #[test]
+    fn diagnostics_report_disabled_gjxl_feature() {
+        let outcome = encode_with_diagnostics(&create_test_image(8, 8), &options(80))
+            .expect("libjxl fallback should encode");
+        assert_eq!(outcome.backend, JxlEncodeBackend::Libjxl);
+        assert_eq!(
+            outcome.fallback_reason,
+            Some(JxlFallbackReason::FeatureDisabled)
+        );
+    }
+
+    #[cfg(feature = "jxl-encoder-gjxl")]
+    #[test]
+    fn diagnostics_report_gjxl_for_eligible_input() {
+        let image = create_test_image(16, 16);
+        let outcome = encode_with_diagnostics(&image, &options(80))
+            .expect("GJXL should encode eligible input");
+        assert_eq!(outcome.backend, JxlEncodeBackend::Gjxl);
+        assert_eq!(outcome.fallback_reason, None);
+
+        let decoded = JxlCodec
+            .decode(&outcome.data)
+            .expect("libjxl should decode GJXL output");
+        assert_eq!((decoded.width, decoded.height), (image.width, image.height));
+        assert_eq!(decoded.data.len(), image.data.len());
+    }
+
+    #[cfg(feature = "jxl-encoder-gjxl")]
+    #[test]
+    fn lossless_alpha_and_thread_requests_report_fallback() {
+        let opaque = create_test_image(8, 8);
+        let lossless = encode_with_diagnostics(&opaque, &options(100))
+            .expect("libjxl lossless fallback should encode");
+        assert_eq!(lossless.backend, JxlEncodeBackend::Libjxl);
+        assert_eq!(lossless.fallback_reason, Some(JxlFallbackReason::Lossless));
+
+        let mut transparent = opaque.clone();
+        transparent.data[3] = 128;
+        let alpha = encode_with_diagnostics(&transparent, &options(80))
+            .expect("libjxl alpha fallback should encode");
+        assert_eq!(alpha.backend, JxlEncodeBackend::Libjxl);
+        assert_eq!(
+            alpha.fallback_reason,
+            Some(JxlFallbackReason::NonOpaqueAlpha)
+        );
+
+        let mut threaded_options = options(80);
+        threaded_options.threads = Some(1);
+        let threaded = encode_with_diagnostics(&opaque, &threaded_options)
+            .expect("libjxl thread-budget fallback should encode");
+        assert_eq!(threaded.backend, JxlEncodeBackend::Libjxl);
+        assert_eq!(
+            threaded.fallback_reason,
+            Some(JxlFallbackReason::ThreadBudget)
+        );
+    }
+
+    #[cfg(feature = "jxl-encoder-gjxl")]
+    #[test]
+    fn gjxl_context_is_reused_across_concurrent_encodes() {
+        let first_context = gjxl::context_address().expect("GJXL context should initialize");
+        let image = create_test_image(16, 16);
+        let handles = (0..4)
+            .map(|_| {
+                let image = image.clone();
+                std::thread::spawn(move || {
+                    let outcome = encode_with_diagnostics(&image, &options(80))?;
+                    if outcome.backend != JxlEncodeBackend::Gjxl {
+                        return Err(Error::Encode("concurrent encode fell back".into()));
+                    }
+                    Ok(outcome.data)
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for handle in handles {
+            let data = handle
+                .join()
+                .expect("encode thread should not panic")
+                .expect("concurrent GJXL encode should succeed");
+            assert!(data.starts_with(&[0xff, 0x0a]));
+        }
+        let second_context = gjxl::context_address().expect("GJXL context should remain available");
+        assert_eq!(first_context, second_context);
+    }
+
     #[test]
     fn encode_lossy_produces_valid_jxl() {
         let codec = JxlCodec;
         let image = create_test_image(8, 8);
-        let options = EncodeOptions {
-            quality: 80,
-            effort: None,
-            png_palette: Default::default(),
-            threads: None,
-        };
+        let options = options(80);
 
         let encoded = codec
             .encode(&image, &options)
