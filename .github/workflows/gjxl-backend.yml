@@ -36,7 +36,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: yunho-c/gjxl
-          ref: feat/rust
+          ref: f71ce2c752743d6b65ca172614b2a34b89fe8ea1
           path: gjxl-source
           submodules: recursive
 
@@ -49,8 +49,11 @@ jobs:
       - name: Install build tools
         run: brew install cmake meson nasm ninja
 
-      - name: Test GJXL-enabled slimg-core
+      - name: Test default libjxl route
+        run: cargo test -p slimg-core --lib codec::jxl
+
+      - name: Test preferred GJXL route
         run: cargo test -p slimg-core --features jxl-encoder-gjxl --lib codec::jxl
 
-      - name: Check CLI feature relay
-        run: cargo check -p slimg --features jxl-encoder-gjxl
+      - name: Check GJXL-enabled workspace targets
+        run: cargo check --workspace --all-targets --features jxl-encoder-gjxl
