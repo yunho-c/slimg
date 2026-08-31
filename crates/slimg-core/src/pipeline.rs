@@ -1,9 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::codec::{
-    EncodeOptions, ImageData, JxlEncoderPreference, PngPaletteMode, get_codec,
-};
+use crate::codec::{EncodeOptions, ImageData, JxlEncoderPreference, PngPaletteMode, get_codec};
 use crate::crop::{self, CropMode};
 use crate::error::{Error, Result};
 use crate::extend::{self, ExtendMode, FillColor};
