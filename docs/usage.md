@@ -42,8 +42,13 @@ slimg convert ./images --format webp --recursive --jobs 4
 Re-encode an image in the same format to reduce file size.
 
 ```
-slimg optimize photo.jpg
+slimg optimize photo.jpg --overwrite
 ```
+
+Without `--output`, optimize replaces the input file in place, so it requires
+either `--overwrite` (confirm in-place replacement) or `--output` (write
+elsewhere). Files whose optimized size is not smaller are skipped when
+optimizing in place.
 
 | Option | Description |
 |--------|-------------|
@@ -51,22 +56,22 @@ slimg optimize photo.jpg
 | `--output`, `-o` | Output path (file or directory) |
 | `--recursive` | Process subdirectories |
 | `--jobs`, `-j` | Number of parallel jobs (default: all cores) |
-| `--overwrite` | Overwrite original files |
+| `--overwrite` | Overwrite existing files (required for in-place optimization) |
 
 **Examples:**
 
 ```bash
-# Optimize a JPEG at quality 80
-slimg optimize photo.jpg
-
-# Optimize in-place (overwrite original)
+# Optimize in-place (replaces the original atomically)
 slimg optimize photo.jpg --overwrite
 
-# Optimize a directory of images
-slimg optimize ./images --quality 70 --recursive
+# Optimize into a separate directory, originals untouched
+slimg optimize ./images --quality 70 --output ./optimized --recursive
+
+# Optimize a directory of images in place
+slimg optimize ./images --quality 70 --recursive --overwrite
 
 # Limit to 2 parallel jobs (useful for large images)
-slimg optimize ./images --recursive --jobs 2
+slimg optimize ./images --recursive --jobs 2 --overwrite
 ```
 
 ## resize
@@ -204,9 +209,11 @@ When processing directories with `--recursive`, slimg uses all available CPU cor
 slimg convert ./images --format webp --recursive --jobs 4
 ```
 
+When processing multiple files, `--output` must be a directory; it is created automatically if it does not exist. Symlinked directories are not followed during recursion (symlinks to regular files are still processed).
+
 **Error handling** — If a file fails to process, slimg skips it and continues. A summary of failed files is printed at the end.
 
-**Safe overwrite** — When using `--overwrite`, slimg writes to a temporary file first and renames it on success. If encoding fails, the original file is preserved.
+**Overwrite safety** — slimg never replaces an existing file unless `--overwrite` is passed. All writes go through a temporary file that is renamed on success, so a crash mid-write never leaves a corrupt or truncated file behind.
 
 ## Library Usage
 

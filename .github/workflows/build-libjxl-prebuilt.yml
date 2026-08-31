@@ -184,6 +184,7 @@ jobs:
           #include "jxl/types.h"
           #include "jxl/codestream_header.h"
           #include "jxl/color_encoding.h"
+          #include "jxl/thread_parallel_runner.h"
           HEADER
 
           bindgen wrapper.h \
@@ -191,6 +192,7 @@ jobs:
             --allowlist-function "JxlEncoderDestroy" \
             --allowlist-function "JxlEncoderReset" \
             --allowlist-function "JxlEncoderSetBasicInfo" \
+            --allowlist-function "JxlEncoderInitBasicInfo" \
             --allowlist-function "JxlEncoderSetColorEncoding" \
             --allowlist-function "JxlEncoderFrameSettingsCreate" \
             --allowlist-function "JxlEncoderSetFrameDistance" \
@@ -199,8 +201,13 @@ jobs:
             --allowlist-function "JxlEncoderAddImageFrame" \
             --allowlist-function "JxlEncoderCloseInput" \
             --allowlist-function "JxlEncoderProcessOutput" \
+            --allowlist-function "JxlEncoderSetParallelRunner" \
             --allowlist-function "JxlEncoderDistanceFromQuality" \
             --allowlist-function "JxlColorEncodingSetToSRGB" \
+            --allowlist-function "JxlThreadParallelRunner" \
+            --allowlist-function "JxlThreadParallelRunnerCreate" \
+            --allowlist-function "JxlThreadParallelRunnerDestroy" \
+            --allowlist-function "JxlThreadParallelRunnerDefaultNumWorkerThreads" \
             --allowlist-function "JxlDecoderCreate" \
             --allowlist-function "JxlDecoderDestroy" \
             --allowlist-function "JxlDecoderReset" \
@@ -212,6 +219,7 @@ jobs:
             --allowlist-function "JxlDecoderImageOutBufferSize" \
             --allowlist-function "JxlDecoderSetImageOutBuffer" \
             --allowlist-function "JxlDecoderReleaseInput" \
+            --allowlist-function "JxlDecoderSetParallelRunner" \
             --allowlist-type "JxlEncoderStatus" \
             --allowlist-type "JxlEncoderFrameSettingId" \
             --allowlist-type "JxlEncoder" \
@@ -220,6 +228,8 @@ jobs:
             --allowlist-type "JxlDecoderStatus" \
             --allowlist-type "JxlBasicInfo" \
             --allowlist-type "JxlPixelFormat" \
+            --allowlist-type "JxlParallelRunner" \
+            --allowlist-type "JxlParallelRetCode" \
             --allowlist-type "JxlDataType" \
             --allowlist-type "JxlEndianness" \
             --allowlist-type "JxlColorEncoding" \
@@ -241,7 +251,7 @@ jobs:
           # Collect static libs from lib/ or lib64/
           for dir in libjxl-install/lib libjxl-install/lib64; do
             [ -d "$dir" ] || continue
-            for lib in libjxl.a libjxl_cms.a libhwy.a libbrotlienc.a libbrotlidec.a libbrotlicommon.a; do
+            for lib in libjxl.a libjxl_cms.a libjxl_threads.a libhwy.a libbrotlienc.a libbrotlidec.a libbrotlicommon.a; do
               [ -f "${dir}/${lib}" ] && cp "${dir}/${lib}" "${STAGE}/lib/"
             done
           done
@@ -251,7 +261,7 @@ jobs:
 
           # Verify all required libs
           MISSING=0
-          for lib in libjxl.a libjxl_cms.a libhwy.a libbrotlienc.a libbrotlidec.a libbrotlicommon.a; do
+          for lib in libjxl.a libjxl_cms.a libjxl_threads.a libhwy.a libbrotlienc.a libbrotlidec.a libbrotlicommon.a; do
             if [ ! -f "${STAGE}/lib/${lib}" ]; then
               echo "::error::Missing ${lib}"
               MISSING=1
@@ -269,7 +279,7 @@ jobs:
           STAGE="libjxl-prebuilt-${PLATFORM}"
           mkdir -p "${STAGE}/lib" "${STAGE}/include/jxl"
 
-          for lib in jxl.lib jxl_cms.lib hwy.lib brotlienc.lib brotlidec.lib brotlicommon.lib; do
+          for lib in jxl.lib jxl_cms.lib jxl_threads.lib hwy.lib brotlienc.lib brotlidec.lib brotlicommon.lib; do
             cp "libjxl-install/lib/${lib}" "${STAGE}/lib/"
           done
 
@@ -278,7 +288,7 @@ jobs:
 
           # Verify all required libs
           MISSING=0
-          for lib in jxl.lib jxl_cms.lib hwy.lib brotlienc.lib brotlidec.lib brotlicommon.lib; do
+          for lib in jxl.lib jxl_cms.lib jxl_threads.lib hwy.lib brotlienc.lib brotlidec.lib brotlicommon.lib; do
             if [ ! -f "${STAGE}/lib/${lib}" ]; then
               echo "::error::Missing ${lib}"
               MISSING=1
@@ -315,6 +325,25 @@ jobs:
       - name: List archives
         run: ls -lh dist/
 
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz > checksums.txt
+          cat checksums.txt
+
+          # Surface the checksums prominently: they must be copied into
+          # PREBUILT_SHA256 in crates/libjxl-sys/build.rs before publishing
+          # the crate that downloads these assets.
+          {
+            echo "## SHA-256 checksums"
+            echo ""
+            echo "Update \`PREBUILT_SHA256\` in \`crates/libjxl-sys/build.rs\` with:"
+            echo ""
+            echo '```'
+            cat checksums.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Create Release
         run: |
           # Delete existing release if re-running
@@ -324,4 +353,4 @@ jobs:
           gh release create "$RELEASE_TAG" \
             --title "libjxl prebuilt v${{ inputs.crate_version }}" \
             --notes "Prebuilt static libraries for slimg-libjxl-sys v${{ inputs.crate_version }} (libjxl ${{ inputs.libjxl_tag }})" \
-            dist/*.tar.gz
+            dist/*.tar.gz dist/checksums.txt

@@ -1,11 +1,11 @@
 [package]
 name = "slimg"
-version = "0.5.1"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "Image optimization CLI — convert, compress, and resize images using MozJPEG, OxiPNG, WebP, AVIF, and QOI"
-repository = "https://github.com/clroot/slimg"
-homepage = "https://github.com/clroot/slimg"
+repository.workspace = true
+homepage.workspace = true
 readme = "../README.md"
 keywords = ["image", "optimization", "cli", "compression", "webp"]
 categories = ["multimedia::images", "command-line-utilities"]
@@ -16,7 +16,7 @@ jpeg-backend-mozjpeg = ["slimg-core/jpeg-backend-mozjpeg"]
 jpeg-backend-jpegli = ["slimg-core/jpeg-backend-jpegli"]
 
 [dependencies]
-slimg-core = { version = "0.5.1", path = "../crates/slimg-core", default-features = false }
+slimg-core = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 clap_complete = "4.5"
 anyhow = "1"
@@ -25,3 +25,5 @@ indicatif = "0.18.4"
 
 [dev-dependencies]
 tempfile = "3.25.0"
+assert_cmd = "2"
+predicates = "3"

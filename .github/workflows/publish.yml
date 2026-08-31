@@ -36,8 +36,8 @@ jobs:
         run: |
           RELEASE_VERSION="${VERSION#v}"
 
-          # Check crates.io
-          if curl -sf "https://crates.io/api/v1/crates/slimg/$RELEASE_VERSION" > /dev/null 2>&1; then
+          # Check crates.io (its API rejects requests without a descriptive User-Agent)
+          if curl -sf -A "slimg-ci (https://github.com/clroot/slimg)" "https://crates.io/api/v1/crates/slimg/$RELEASE_VERSION" > /dev/null 2>&1; then
             echo "crates=true" >> $GITHUB_OUTPUT
             echo "✅ crates.io: slimg@$RELEASE_VERSION already published"
           else
@@ -86,14 +86,22 @@ jobs:
       - name: Checkout submodules (for slimg-core dav1d build)
         run: git submodule update --init --recursive
 
+      # Skip crates that are already on crates.io, but let every real
+      # failure (auth, network, verification) fail the job instead of
+      # being swallowed.
       - name: Publish slimg-libjxl-sys
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          # --no-default-features: disable vendored so cmake/bindgen are not needed
-          # --no-verify: skip sandbox build (prebuilt archive not available during packaging)
-          cargo publish -p slimg-libjxl-sys --no-default-features --no-verify \
-            || echo "Already published, skipping"
+          CRATE_VERSION=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name=="slimg-libjxl-sys") | .version')
+          if curl -sf -A "slimg-ci (https://github.com/clroot/slimg)" "https://crates.io/api/v1/crates/slimg-libjxl-sys/${CRATE_VERSION}" > /dev/null; then
+            echo "slimg-libjxl-sys@${CRATE_VERSION} already published, skipping"
+          else
+            # --no-default-features: disable vendored so cmake/bindgen are not needed
+            # --no-verify: skip sandbox build (prebuilt archive not available during packaging)
+            cargo publish -p slimg-libjxl-sys --no-default-features --no-verify
+          fi
 
       - name: Wait for crates.io index (slimg-libjxl-sys)
         run: sleep 30
@@ -101,7 +109,13 @@ jobs:
       - name: Publish slimg-core
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p slimg-core || echo "Already published, skipping"
+        run: |
+          RELEASE_VERSION="${VERSION#v}"
+          if curl -sf -A "slimg-ci (https://github.com/clroot/slimg)" "https://crates.io/api/v1/crates/slimg-core/${RELEASE_VERSION}" > /dev/null; then
+            echo "slimg-core@${RELEASE_VERSION} already published, skipping"
+          else
+            cargo publish -p slimg-core
+          fi
 
       - name: Wait for crates.io index
         run: sleep 30
@@ -109,7 +123,13 @@ jobs:
       - name: Publish slimg
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p slimg || echo "Already published, skipping"
+        run: |
+          RELEASE_VERSION="${VERSION#v}"
+          if curl -sf -A "slimg-ci (https://github.com/clroot/slimg)" "https://crates.io/api/v1/crates/slimg/${RELEASE_VERSION}" > /dev/null; then
+            echo "slimg@${RELEASE_VERSION} already published, skipping"
+          else
+            cargo publish -p slimg
+          fi
 
   # ─────────────────────────────────────────────
   # Publish Homebrew formula to tap repository
@@ -294,9 +314,28 @@ jobs:
   # ─────────────────────────────────────────────
   # Package and publish Kotlin bindings to Maven Central
   # ─────────────────────────────────────────────
+  verify-kotlin-version:
+    name: Verify Kotlin package version
+    needs: [check-versions]
+    if: needs.check-versions.outputs.maven-published != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version consistency
+        shell: bash
+        run: |
+          RELEASE_VERSION="${VERSION#v}"
+          PKG_VERSION=$(grep '^version=' bindings/kotlin/gradle.properties | cut -d= -f2)
+          if [ "$RELEASE_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Version mismatch: release tag=$RELEASE_VERSION, gradle.properties=$PKG_VERSION"
+            exit 1
+          fi
+          echo "Version verified: $RELEASE_VERSION"
+
   publish-kotlin:
     name: Publish Kotlin to Maven Central
-    needs: [build-kotlin-native, generate-kotlin-bindings]
+    needs: [build-kotlin-native, generate-kotlin-bindings, verify-kotlin-version]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

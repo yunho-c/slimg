@@ -73,7 +73,7 @@ cargo install --path cli
 slimg convert photo.jpg --format webp
 
 # 최적화 (같은 포맷으로 재인코딩)
-slimg optimize photo.jpg --quality 70
+slimg optimize photo.jpg --quality 70 --overwrite
 
 # 리사이즈
 slimg resize photo.jpg --width 800
@@ -92,6 +92,14 @@ slimg extend photo.png --aspect 1:1 --transparent
 
 # 배치 처리 + 포맷 변환
 slimg convert ./images --format webp --output ./output --recursive --jobs 4
+```
+
+## Agent Skill
+
+slimg용 [Agent Skill](https://agentskills.io)을 [clroot/skills](https://github.com/clroot/skills)에서 제공합니다. CLI 명령, 출력 경로 규칙, 포맷 추천 기준을 담고 있어 Claude Code·Codex·Cursor 같은 코딩 에이전트가 slimg로 이미지를 변환·최적화할 수 있습니다.
+
+```bash
+npx skills add https://github.com/clroot/skills --skill slimg
 ```
 
 ## 데스크톱 GUI

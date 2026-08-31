@@ -31,7 +31,11 @@ pub fn calculate_crop_region(
             if width == 0 || height == 0 {
                 return Err(Error::Crop("crop dimensions must be non-zero".to_string()));
             }
-            if x + width > img_w || y + height > img_h {
+            // Overflow-safe bounds check: `x + width` could wrap for
+            // caller-controlled values.
+            let x_in_bounds = width <= img_w && x <= img_w - width;
+            let y_in_bounds = height <= img_h && y <= img_h - height;
+            if !x_in_bounds || !y_in_bounds {
                 return Err(Error::Crop(format!(
                     "crop region ({x},{y},{width},{height}) exceeds image bounds ({img_w}x{img_h})"
                 )));
@@ -68,6 +72,17 @@ pub fn calculate_crop_region(
 
 /// Crop an image according to the given mode.
 pub fn crop(image: &ImageData, mode: &CropMode) -> Result<ImageData> {
+    let expected_size = image.width as usize * image.height as usize * 4;
+    if image.data.len() != expected_size {
+        return Err(Error::Crop(format!(
+            "invalid image data: expected {} bytes ({}x{}x4), got {}",
+            expected_size,
+            image.width,
+            image.height,
+            image.data.len()
+        )));
+    }
+
     let (x, y, crop_w, crop_h) = calculate_crop_region(image.width, image.height, mode)?;
 
     let bytes_per_pixel = 4usize;
@@ -132,6 +147,58 @@ mod tests {
                 y: 0,
                 width: 100,
                 height: 50,
+            },
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn region_offset_overflow_is_rejected() {
+        let result = calculate_crop_region(
+            200,
+            100,
+            &CropMode::Region {
+                x: u32::MAX,
+                y: 0,
+                width: 100,
+                height: 50,
+            },
+        );
+        assert!(
+            result.is_err(),
+            "x + width overflow must not pass bounds check"
+        );
+
+        let result = calculate_crop_region(
+            200,
+            100,
+            &CropMode::Region {
+                x: 0,
+                y: u32::MAX,
+                width: 100,
+                height: 50,
+            },
+        );
+        assert!(
+            result.is_err(),
+            "y + height overflow must not pass bounds check"
+        );
+    }
+
+    #[test]
+    fn crop_invalid_data_length_returns_error() {
+        let img = ImageData {
+            width: 100,
+            height: 50,
+            data: vec![0u8; 16],
+        };
+        let result = crop(
+            &img,
+            &CropMode::Region {
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10,
             },
         );
         assert!(result.is_err());

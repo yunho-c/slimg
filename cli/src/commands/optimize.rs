@@ -1,10 +1,9 @@
 use std::path::PathBuf;
 
 use clap::Args;
-use rayon::prelude::*;
 use slimg_core::{EncodeOptions, optimize_with_options, output_path};
 
-use super::{ErrorCollector, collect_files, configure_thread_pool, make_progress_bar, safe_write};
+use super::{FileOutcome, run_batch, safe_write};
 
 #[derive(Debug, Args)]
 pub struct OptimizeArgs {
@@ -23,7 +22,7 @@ pub struct OptimizeArgs {
     #[arg(short, long)]
     pub output: Option<PathBuf>,
 
-    /// Overwrite original file
+    /// Overwrite existing files (required for in-place optimization)
     #[arg(long)]
     pub overwrite: bool,
 
@@ -37,19 +36,24 @@ pub struct OptimizeArgs {
 }
 
 pub fn run(args: OptimizeArgs) -> anyhow::Result<()> {
-    let files = collect_files(&args.input, args.recursive)?;
-
-    if files.is_empty() {
-        anyhow::bail!("no image files found in {}", args.input.display());
+    // Without --output, optimize writes back to the input file; require the
+    // explicit opt-in before touching anything.
+    if args.output.is_none() && !args.overwrite {
+        anyhow::bail!(
+            "optimize replaces the input file in place; pass --overwrite to \
+             confirm, or use --output to write elsewhere"
+        );
     }
 
-    configure_thread_pool(args.jobs)?;
+    let has_explicit_output = args.output.is_some();
 
-    let pb = make_progress_bar(files.len());
-    let errors = ErrorCollector::new();
-
-    files.par_iter().for_each(|file| {
-        let result: anyhow::Result<()> = (|| {
+    run_batch(
+        &args.input,
+        args.output.as_deref(),
+        args.recursive,
+        args.jobs,
+        "optimize",
+        |file, output| {
             let original_data = std::fs::read(file)?;
             let original_size = original_data.len() as u64;
 
@@ -64,53 +68,27 @@ pub fn run(args: OptimizeArgs) -> anyhow::Result<()> {
             )?;
             let new_size = result.data.len() as u64;
 
-            let out = if args.overwrite {
-                file.clone()
-            } else {
-                output_path(file, result.format, args.output.as_deref())
+            let out = match output {
+                Some(out) => output_path(file, result.format, Some(out)),
+                // In-place: write back to the exact input path.
+                None => file.to_path_buf(),
             };
 
-            if new_size < original_size || args.overwrite {
-                safe_write(&out, &result.data, args.overwrite)?;
-
-                let ratio = if original_size > 0 {
-                    (new_size as f64 / original_size as f64) * 100.0
-                } else {
-                    0.0
-                };
-
-                pb.println(format!(
-                    "{} -> {} ({} -> {} bytes, {:.1}%)",
-                    file.display(),
-                    out.display(),
-                    original_size,
-                    new_size,
-                    ratio,
-                ));
-            } else {
-                pb.println(format!(
-                    "{} -> skipped (optimized size {} >= original {})",
-                    file.display(),
-                    new_size,
-                    original_size,
-                ));
+            // Writing a same-or-larger file over the original is pointless;
+            // with an explicit --output the caller expects a file either way.
+            if new_size >= original_size && !has_explicit_output {
+                return Ok(FileOutcome::Skipped {
+                    reason: format!("optimized size {new_size} >= original {original_size}"),
+                });
             }
 
-            Ok(())
-        })();
+            safe_write(&out, &result.data, args.overwrite)?;
 
-        if let Err(e) = result {
-            errors.push(file, &e);
-        }
-        pb.inc(1);
-    });
-
-    let fail_count = errors.summarize(&pb);
-    pb.finish_and_clear();
-
-    if fail_count > 0 {
-        anyhow::bail!("{fail_count} file(s) failed to optimize");
-    }
-
-    Ok(())
+            Ok(FileOutcome::Written {
+                out,
+                original_size,
+                new_size,
+            })
+        },
+    )
 }

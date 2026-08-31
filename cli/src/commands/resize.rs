@@ -1,13 +1,14 @@
 use std::path::PathBuf;
 
+use anyhow::Context;
 use clap::Args;
 use slimg_core::{PipelineOptions, ResizeMode, convert, decode_file, output_path};
 
-use super::FormatArg;
+use super::{FileOutcome, FormatArg, run_batch, safe_write};
 
 #[derive(Debug, Args)]
 pub struct ResizeArgs {
-    /// Input file
+    /// Input file or directory
     pub input: PathBuf,
 
     /// Target width in pixels
@@ -34,69 +35,81 @@ pub struct ResizeArgs {
     #[arg(short, long)]
     pub effort: Option<u8>,
 
-    /// Output path
+    /// Output path (file or directory)
     #[arg(short, long)]
     pub output: Option<PathBuf>,
+
+    /// Overwrite existing files
+    #[arg(long)]
+    pub overwrite: bool,
+
+    /// Process subdirectories recursively
+    #[arg(long)]
+    pub recursive: bool,
+
+    /// Number of parallel jobs (defaults to CPU count)
+    #[arg(short, long)]
+    pub jobs: Option<usize>,
 }
 
-pub fn run(args: ResizeArgs) -> anyhow::Result<()> {
-    let resize_mode = match (args.width, args.height, args.scale) {
-        (Some(w), Some(h), None) => ResizeMode::Fit(w, h),
-        (Some(w), None, None) => ResizeMode::Width(w),
-        (None, Some(h), None) => ResizeMode::Height(h),
-        (None, None, Some(s)) => ResizeMode::Scale(s),
+fn build_resize_mode(args: &ResizeArgs) -> anyhow::Result<ResizeMode> {
+    match (args.width, args.height, args.scale) {
+        (Some(w), Some(h), None) => Ok(ResizeMode::Fit(w, h)),
+        (Some(w), None, None) => Ok(ResizeMode::Width(w)),
+        (None, Some(h), None) => Ok(ResizeMode::Height(h)),
+        (None, None, Some(s)) => Ok(ResizeMode::Scale(s)),
         (None, None, None) => {
             anyhow::bail!("specify at least one of --width, --height, or --scale");
         }
         _ => {
             anyhow::bail!("--scale cannot be combined with --width or --height");
         }
-    };
-
-    let original_size = std::fs::metadata(&args.input)?.len();
-    let (image, src_format) = decode_file(&args.input)?;
-
-    let target_format = args.format.map(|f| f.into_format()).unwrap_or(src_format);
-
-    if !target_format.can_encode() {
-        anyhow::bail!("cannot encode to {} format", target_format.extension());
     }
+}
 
-    let options = PipelineOptions {
-        format: target_format,
-        quality: args.quality,
-        effort: args.effort,
-        png_palette: Default::default(),
-        threads: None,
-        resize: Some(resize_mode),
-        crop: None,
-        extend: None,
-        fill_color: None,
-    };
+pub fn run(args: ResizeArgs) -> anyhow::Result<()> {
+    let resize_mode = build_resize_mode(&args)?;
 
-    let result = convert(&image, &options)?;
+    run_batch(
+        &args.input,
+        args.output.as_deref(),
+        args.recursive,
+        args.jobs,
+        "resize",
+        |file, output| {
+            let original_size = std::fs::metadata(file)?.len();
+            let (image, src_format) =
+                decode_file(file).with_context(|| format!("{}", file.display()))?;
 
-    let out = output_path(&args.input, target_format, args.output.as_deref());
-    if let Some(parent) = out.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    result.save(&out)?;
+            let target_format = args.format.map(|f| f.into_format()).unwrap_or(src_format);
 
-    let new_size = result.data.len() as u64;
-    let ratio = if original_size > 0 {
-        (new_size as f64 / original_size as f64) * 100.0
-    } else {
-        0.0
-    };
+            if !target_format.can_encode() {
+                anyhow::bail!("cannot encode to {} format", target_format.extension());
+            }
 
-    eprintln!(
-        "{} -> {} ({} -> {} bytes, {:.1}%)",
-        args.input.display(),
-        out.display(),
-        original_size,
-        new_size,
-        ratio,
-    );
+            let options = PipelineOptions {
+                format: target_format,
+                quality: args.quality,
+                effort: args.effort,
+                png_palette: Default::default(),
+                threads: None,
+                resize: Some(resize_mode.clone()),
+                crop: None,
+                extend: None,
+                fill_color: None,
+            };
 
-    Ok(())
+            let result =
+                convert(&image, &options).with_context(|| format!("{}", file.display()))?;
+
+            let out = output_path(file, target_format, output);
+            safe_write(&out, &result.data, args.overwrite)?;
+
+            Ok(FileOutcome::Written {
+                out,
+                original_size,
+                new_size: result.data.len() as u64,
+            })
+        },
+    )
 }

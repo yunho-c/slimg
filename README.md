@@ -82,7 +82,7 @@ For the full usage guide, see [docs/usage.md](./docs/usage.md).
 slimg convert photo.jpg --format webp
 
 # Optimize (re-encode in same format)
-slimg optimize photo.jpg --quality 70
+slimg optimize photo.jpg --quality 70 --overwrite
 
 # Resize
 slimg resize photo.jpg --width 800
@@ -101,6 +101,14 @@ slimg extend photo.png --aspect 1:1 --transparent
 
 # Batch processing with format conversion
 slimg convert ./images --format webp --output ./output --recursive --jobs 4
+```
+
+## Agent Skill
+
+An [Agent Skill](https://agentskills.io) for slimg is available in [clroot/skills](https://github.com/clroot/skills). It teaches coding agents (Claude Code, Codex, Cursor, etc.) the CLI commands, output-path rules, and format recommendations, so they can convert and optimize images with slimg on your behalf.
+
+```bash
+npx skills add https://github.com/clroot/skills --skill slimg
 ```
 
 ## Desktop GUI

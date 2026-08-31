@@ -9,7 +9,7 @@ import {
 
 export interface BatchItem {
   path: string;
-  status: "pending" | "processing" | "completed" | "error";
+  status: "pending" | "processing" | "completed" | "error" | "cancelled";
   result?: ProcessResult;
   error?: string;
 }
@@ -19,6 +19,7 @@ interface UseBatchProcessReturn {
   isProcessing: boolean;
   progress: number;
   processBatch: (paths: string[], options: ProcessOptions) => Promise<void>;
+  cancelBatch: () => void;
   reset: () => void;
 }
 
@@ -28,7 +29,7 @@ export function useBatchProcess(): UseBatchProcessReturn {
   const unlistenRef = useRef<UnlistenFn | null>(null);
 
   const completedCount = batchItems.filter(
-    (item) => item.status === "completed" || item.status === "error"
+    (item) => item.status !== "pending" && item.status !== "processing"
   ).length;
   const progress =
     batchItems.length > 0
@@ -43,6 +44,11 @@ export function useBatchProcess(): UseBatchProcessReturn {
       }));
       setBatchItems(initialItems);
       setIsProcessing(true);
+
+      // Drop any listener left over from a previous run before
+      // registering a new one.
+      unlistenRef.current?.();
+      unlistenRef.current = null;
 
       const unlisten = await listen<BatchProgress>(
         "batch-progress",
@@ -86,6 +92,12 @@ export function useBatchProcess(): UseBatchProcessReturn {
     []
   );
 
+  const cancelBatch = useCallback(() => {
+    // Fire-and-forget: the backend flags the running batch, which then
+    // emits "cancelled" progress events for the remaining files.
+    void api.cancelBatch();
+  }, []);
+
   const reset = useCallback(() => {
     if (unlistenRef.current) {
       unlistenRef.current();
@@ -95,5 +107,5 @@ export function useBatchProcess(): UseBatchProcessReturn {
     setIsProcessing(false);
   }, []);
 
-  return { batchItems, isProcessing, progress, processBatch, reset };
+  return { batchItems, isProcessing, progress, processBatch, cancelBatch, reset };
 }

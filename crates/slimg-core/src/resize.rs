@@ -42,8 +42,10 @@ pub fn calculate_dimensions(orig_w: u32, orig_h: u32, mode: &ResizeMode) -> Resu
             (target_w, target_h)
         }
         ResizeMode::Scale(factor) => {
-            if factor <= 0.0 {
-                return Err(Error::Resize("scale factor must be positive".to_string()));
+            if !factor.is_finite() || factor <= 0.0 {
+                return Err(Error::Resize(
+                    "scale factor must be positive and finite".to_string(),
+                ));
             }
             let target_w = (orig_w as f64 * factor).round() as u32;
             let target_h = (orig_h as f64 * factor).round() as u32;
@@ -136,5 +138,12 @@ mod tests {
         let result = resize(&img, &ResizeMode::Exact(50, 50)).unwrap();
         assert_eq!(result.width, 50);
         assert_eq!(result.height, 50);
+    }
+
+    #[test]
+    fn scale_non_finite_is_rejected() {
+        assert!(calculate_dimensions(200, 100, &ResizeMode::Scale(f64::INFINITY)).is_err());
+        assert!(calculate_dimensions(200, 100, &ResizeMode::Scale(f64::NAN)).is_err());
+        assert!(calculate_dimensions(200, 100, &ResizeMode::Scale(-1.0)).is_err());
     }
 }

@@ -42,6 +42,7 @@ function App() {
     isProcessing: batchProcessing,
     progress: batchProgress,
     processBatch,
+    cancelBatch,
     reset: resetBatch,
   } = useBatchProcess();
   const { settings, updateSettings, resetSettings } = useSettings();
@@ -205,6 +206,7 @@ function App() {
                 onBatchItemClick={setSelectedBatchIndex}
                 onReset={handleReset}
                 onClear={handleClearFiles}
+                onCancel={cancelBatch}
               />
             ) : (
               <FileListWithOptions
@@ -238,6 +240,7 @@ function ResultView({
   onBatchItemClick,
   onReset,
   onClear,
+  onCancel,
 }: {
   isBatchMode: boolean;
   files: LoadedFile[];
@@ -250,6 +253,7 @@ function ResultView({
   onBatchItemClick: (index: number) => void;
   onReset: () => void;
   onClear: () => void;
+  onCancel: () => void;
 }) {
   if (isBatchMode) {
     const selectedItem =
@@ -285,7 +289,16 @@ function ResultView({
             </div>
           )}
 
-        {!batchProcessing && (
+        {batchProcessing ? (
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            className="w-full"
+            size="lg"
+          >
+            Cancel
+          </Button>
+        ) : (
           <div className="flex gap-4">
             <Button
               variant="outline"

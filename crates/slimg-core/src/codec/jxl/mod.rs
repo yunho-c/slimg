@@ -25,7 +25,15 @@ impl Codec for JxlCodec {
         let config =
             types::EncodeConfig::from_options(options.quality, options.effort, options.threads);
         let mut enc = encoder::Encoder::new()?;
-        enc.encode_rgba(&image.data, image.width, image.height, &config)
+
+        // Fully opaque images don't need an alpha channel; encoding RGB
+        // avoids storing a redundant plane.
+        let is_opaque = image.data.chunks_exact(4).all(|px| px[3] == u8::MAX);
+        if is_opaque {
+            enc.encode(&image.to_rgb(), image.width, image.height, 3, &config)
+        } else {
+            enc.encode(&image.data, image.width, image.height, 4, &config)
+        }
     }
 }
 
@@ -91,6 +99,32 @@ mod tests {
     }
 
     #[test]
+    fn explicit_thread_budget_matches_libjxl_build_capability() {
+        let codec = JxlCodec;
+        let image = create_test_image(8, 8);
+        let result = codec.encode(
+            &image,
+            &EncodeOptions {
+                quality: 80,
+                effort: None,
+                png_palette: Default::default(),
+                threads: Some(2),
+            },
+        );
+
+        if libjxl_sys::JXL_THREADS_AVAILABLE {
+            assert!(result.is_ok(), "threaded source/prebuilt encode failed");
+        } else {
+            let error = result.expect_err("old serial-only prebuilts must reject a thread budget");
+            assert!(
+                error
+                    .to_string()
+                    .contains("does not include the thread runner")
+            );
+        }
+    }
+
+    #[test]
     fn roundtrip_lossy() {
         let codec = JxlCodec;
         let original = create_test_image(16, 16);
@@ -107,6 +141,85 @@ mod tests {
         assert_eq!(decoded.width, original.width);
         assert_eq!(decoded.height, original.height);
         assert_eq!(decoded.data.len(), original.data.len());
+    }
+
+    #[test]
+    fn roundtrip_lossless_preserves_alpha() {
+        let codec = JxlCodec;
+        let mut image = create_test_image(4, 4);
+        for (i, px) in image.data.chunks_exact_mut(4).enumerate() {
+            px[3] = (i * 16) as u8;
+        }
+        let original = image.clone();
+
+        let encoded = codec
+            .encode(
+                &image,
+                &EncodeOptions {
+                    quality: 100,
+                    effort: None,
+                    png_palette: Default::default(),
+                    threads: None,
+                },
+            )
+            .expect("encode failed");
+        let decoded = codec.decode(&encoded).expect("decode failed");
+
+        assert_eq!(decoded.data, original.data);
+    }
+
+    #[test]
+    fn opaque_image_decodes_back_opaque() {
+        let codec = JxlCodec;
+        let image = create_test_image(8, 8); // alpha = 255 everywhere
+
+        let encoded = codec
+            .encode(
+                &image,
+                &EncodeOptions {
+                    quality: 100,
+                    effort: None,
+                    png_palette: Default::default(),
+                    threads: None,
+                },
+            )
+            .expect("encode failed");
+        let decoded = codec.decode(&encoded).expect("decode failed");
+
+        assert_eq!(decoded.width, 8);
+        assert_eq!(decoded.height, 8);
+        assert!(decoded.data.chunks_exact(4).all(|px| px[3] == u8::MAX));
+    }
+
+    #[test]
+    fn decode_truncated_data_returns_error() {
+        let codec = JxlCodec;
+        let image = create_test_image(16, 16);
+        let encoded = codec
+            .encode(
+                &image,
+                &EncodeOptions {
+                    quality: 80,
+                    effort: None,
+                    png_palette: Default::default(),
+                    threads: None,
+                },
+            )
+            .expect("encode failed");
+
+        // Cut the codestream short; the decoder must error out instead
+        // of spinning forever waiting for more input.
+        let truncated = &encoded[..encoded.len() / 2];
+        assert!(codec.decode(truncated).is_err());
+    }
+
+    #[test]
+    fn decode_invalid_data_returns_error() {
+        let codec = JxlCodec;
+        // Valid signature followed by garbage.
+        let mut data = vec![0xFF, 0x0A];
+        data.extend_from_slice(&[0xAB; 64]);
+        assert!(codec.decode(&data).is_err());
     }
 
     #[test]

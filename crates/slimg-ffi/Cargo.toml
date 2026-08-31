@@ -1,8 +1,8 @@
 [package]
 name = "slimg-ffi"
-version = "0.5.1"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "UniFFI bindings for slimg-core image optimization library"
 publish = false
 

@@ -7,7 +7,15 @@ use std::process::Command;
 #[cfg(not(feature = "jpegli"))]
 const GITHUB_REPO: &str = "clroot/slimg";
 
+// The 0.1.1 crate adds jpegli source builds and optional JXL threading, while
+// retaining the already-published 0.1.0 archives as its serial fallback. Once
+// the updated prebuilt workflow has produced threaded 0.1.1 archives, update
+// this version and PREBUILT_SHA256 together.
+#[cfg(not(feature = "jpegli"))]
+const PREBUILT_RELEASE_VERSION: &str = "0.1.0";
+
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(slimg_libjxl_threads)");
     println!("cargo:rerun-if-env-changed=LIBJXL_SYS_DIR");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
     println!("cargo:rerun-if-changed=build.rs");
@@ -106,7 +114,7 @@ fn build_vendored() {
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-search=native={}", lib64_dir.display());
 
-    emit_link_libs();
+    emit_link_libs(has_jxl_threads(&lib_dir) || has_jxl_threads(&lib64_dir));
 
     // bindgen
     let include_dir = dst.join("include");
@@ -145,6 +153,7 @@ fn run_bindgen(src_include: &Path, install_include: &Path, out_file: &Path) {
         .allowlist_function("JxlEncoderDestroy")
         .allowlist_function("JxlEncoderReset")
         .allowlist_function("JxlEncoderSetBasicInfo")
+        .allowlist_function("JxlEncoderInitBasicInfo")
         .allowlist_function("JxlEncoderSetColorEncoding")
         .allowlist_function("JxlEncoderFrameSettingsCreate")
         .allowlist_function("JxlEncoderSetFrameDistance")
@@ -197,9 +206,72 @@ fn run_bindgen(src_include: &Path, install_include: &Path, out_file: &Path) {
 
 // ── Prebuilt download ───────────────────────────────────────────────────────
 
+/// Pinned SHA-256 checksums of the prebuilt archives for the release tag
+/// selected by `PREBUILT_RELEASE_VERSION`.
+///
+/// When replacing the prebuilt release:
+/// 1. run the `build-libjxl-prebuilt` workflow with the target version so the
+///    release assets exist,
+/// 2. update `PREBUILT_RELEASE_VERSION` and this table from the
+///    `checksums.txt` the workflow prints,
+/// 3. only then publish the crate.
+#[cfg(not(feature = "jpegli"))]
+const PREBUILT_SHA256: &[(&str, &str)] = &[
+    (
+        "linux-x86_64",
+        "26f6905b80c1961dea6a1c3cd35d9988a5cec437b00ab02048cb0c784ea0bd24",
+    ),
+    (
+        "linux-aarch64",
+        "f957de457ba5dd6cc7dcda95213721a52c84646c1489abe2ffc6292628dfac39",
+    ),
+    (
+        "macos-x86_64",
+        "e7b8cb576526e17a62390c65fab6484efe2720db9055d48bdeb331e4a73ccc75",
+    ),
+    (
+        "macos-aarch64",
+        "356a694d55f6c62103b09c9590cab2e9e3d30a4e6d56ec97f63980a942bed4ba",
+    ),
+    (
+        "windows-x86_64",
+        "fc7da1c7d6aea8833b2746fa442f6c69e11a64fa3951597ab431050074aaf27e",
+    ),
+];
+
+#[cfg(not(feature = "jpegli"))]
+fn expected_sha256(platform: &str) -> &'static str {
+    PREBUILT_SHA256
+        .iter()
+        .find(|(p, _)| *p == platform)
+        .map(|(_, sha)| *sha)
+        .unwrap_or_else(|| panic!("slimg-libjxl-sys: no pinned checksum for platform {platform}"))
+}
+
+#[cfg(not(feature = "jpegli"))]
+fn verify_sha256(path: &Path, expected: &str, url: &str) {
+    use sha2::{Digest, Sha256};
+
+    let data = std::fs::read(path)
+        .unwrap_or_else(|e| panic!("slimg-libjxl-sys: failed to read downloaded archive: {e}"));
+    let actual = format!("{:x}", Sha256::digest(&data));
+
+    if actual != expected {
+        let _ = std::fs::remove_file(path);
+        panic!(
+            "slimg-libjxl-sys: checksum mismatch for {url}\n\
+             expected: {expected}\n\
+             actual:   {actual}\n\
+             The release asset does not match the checksum pinned in this \
+             crate. Refusing to link it. If the prebuilt archives were \
+             legitimately regenerated, update PREBUILT_SHA256 in build.rs."
+        );
+    }
+}
+
 #[cfg(not(feature = "jpegli"))]
 fn download_prebuilt() -> PathBuf {
-    let version = env!("CARGO_PKG_VERSION");
+    let version = PREBUILT_RELEASE_VERSION;
     let platform = detect_platform();
     let tag = format!("libjxl-prebuilt-v{version}");
     let archive_name = format!("libjxl-prebuilt-{platform}.tar.gz");
@@ -245,6 +317,10 @@ fn download_prebuilt() -> PathBuf {
          Hint: check network connectivity, or set LIBJXL_SYS_DIR, or enable the vendored feature"
     );
 
+    // Verify integrity against the checksum pinned in this crate before
+    // extracting or linking anything.
+    verify_sha256(&archive_path, expected_sha256(platform), &url);
+
     // Extract via tar.
     let status = Command::new("tar")
         .args(["-xzf"])
@@ -284,14 +360,21 @@ fn detect_platform() -> &'static str {
 fn link_prebuilt(prebuilt_dir: &Path) {
     let lib_dir = prebuilt_dir.join("lib");
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
-    emit_link_libs();
+    emit_link_libs(has_jxl_threads(&lib_dir));
 }
 
-fn emit_link_libs() {
+fn has_jxl_threads(lib_dir: &Path) -> bool {
+    lib_dir.join("libjxl_threads.a").is_file() || lib_dir.join("jxl_threads.lib").is_file()
+}
+
+fn emit_link_libs(link_threads: bool) {
     // libjxl core
     println!("cargo:rustc-link-lib=static=jxl");
     println!("cargo:rustc-link-lib=static=jxl_cms");
-    println!("cargo:rustc-link-lib=static=jxl_threads");
+    if link_threads {
+        println!("cargo:rustc-link-lib=static=jxl_threads");
+        println!("cargo:rustc-cfg=slimg_libjxl_threads");
+    }
 
     // libjxl vendored dependencies
     println!("cargo:rustc-link-lib=static=hwy");

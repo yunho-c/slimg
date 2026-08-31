@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -29,7 +30,9 @@ pub struct PipelineOptions {
     pub crop: Option<CropMode>,
     /// Optional extend (padding) to apply after crop and before resize.
     pub extend: Option<ExtendMode>,
-    /// Fill color for the extended region (defaults to opaque white).
+    /// Fill color for the extended region. When `None`, core defaults to
+    /// opaque white; note the Kotlin/Python bindings pass an explicit
+    /// transparent fill by default instead.
     pub fill_color: Option<FillColor>,
 }
 
@@ -77,8 +80,8 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
     }
 
     let image = match &options.crop {
-        Some(mode) => crop::crop(image, mode)?,
-        None => image.clone(),
+        Some(mode) => Cow::Owned(crop::crop(image, mode)?),
+        None => Cow::Borrowed(image),
     };
 
     let image = match &options.extend {
@@ -86,13 +89,13 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
             let fill = options
                 .fill_color
                 .unwrap_or(FillColor::Solid([255, 255, 255, 255]));
-            extend::extend(&image, mode, &fill)?
+            Cow::Owned(extend::extend(&image, mode, &fill)?)
         }
         None => image,
     };
 
     let image = match &options.resize {
-        Some(mode) => resize::resize(&image, mode)?,
+        Some(mode) => Cow::Owned(resize::resize(&image, mode)?),
         None => image,
     };
 
@@ -114,6 +117,11 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
 }
 
 /// Decode the data and re-encode in the same format at the given quality.
+///
+/// Note: this is a full decode → re-encode round trip, not a lossless
+/// transcode. For lossy formats (JPEG, WebP, AVIF, lossy JXL) each pass
+/// introduces additional generation loss, and a high `quality` can produce
+/// a *larger* file than the input.
 pub fn optimize(data: &[u8], quality: u8) -> Result<PipelineResult> {
     optimize_with_threads(data, quality, None)
 }
@@ -191,6 +199,52 @@ mod tests {
             Some(Path::new("/out/result.png")),
         );
         assert_eq!(result, PathBuf::from("/out/result.png"));
+    }
+
+    #[test]
+    fn optimize_reencodes_same_format() {
+        let image = ImageData::new(4, 4, vec![200u8; 64]);
+        let options = PipelineOptions {
+            format: Format::Qoi,
+            quality: 80,
+            effort: None,
+            png_palette: Default::default(),
+            threads: None,
+            resize: None,
+            crop: None,
+            extend: None,
+            fill_color: None,
+        };
+        let encoded = convert(&image, &options).unwrap();
+
+        let result = optimize(&encoded.data, 80).unwrap();
+        assert_eq!(result.format, Format::Qoi);
+        assert_eq!(result.width, 4);
+        assert_eq!(result.height, 4);
+        assert!(!result.data.is_empty());
+    }
+
+    #[test]
+    fn optimize_unknown_format_returns_error() {
+        assert!(optimize(&[0u8; 16], 80).is_err());
+    }
+
+    #[test]
+    fn pipeline_result_save_writes_file() {
+        let dir = std::env::temp_dir().join("slimg-pipeline-save-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("out.bin");
+
+        let result = PipelineResult {
+            data: vec![1, 2, 3],
+            format: Format::Qoi,
+            width: 1,
+            height: 1,
+        };
+        result.save(&path).unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), vec![1, 2, 3]);
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

@@ -45,9 +45,7 @@ pub fn calculate_extend_region(
             height: rh,
         } => {
             if rw == 0 || rh == 0 {
-                return Err(Error::Extend(
-                    "aspect ratio must be non-zero".to_string(),
-                ));
+                return Err(Error::Extend("aspect ratio must be non-zero".to_string()));
             }
 
             let target_ratio = rw as f64 / rh as f64;
@@ -99,7 +97,10 @@ pub fn extend(image: &ImageData, mode: &ExtendMode, fill: &FillColor) -> Result<
     if image.data.len() != expected_size {
         return Err(Error::Extend(format!(
             "invalid image data: expected {} bytes ({}x{}x4), got {}",
-            expected_size, image.width, image.height, image.data.len()
+            expected_size,
+            image.width,
+            image.height,
+            image.data.len()
         )));
     }
 
@@ -365,6 +366,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::identity_op)] // `1 * stride` spells out row/col intent
     fn extend_preserves_pixel_data() {
         // Create 2x1 image: pixel(0,0)=[10,20,30,255] pixel(1,0)=[40,50,60,255]
         let data = vec![10, 20, 30, 255, 40, 50, 60, 255];

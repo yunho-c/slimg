@@ -88,21 +88,137 @@ pub(crate) fn make_progress_bar(total: usize) -> ProgressBar {
     pb
 }
 
-/// Write data to a file safely. When overwriting, writes to a temp file first
-/// and renames on success, so the original is preserved if encoding fails.
+/// Write data to a file atomically (temp file + rename), so a crash mid-write
+/// never leaves a corrupt or truncated file behind.
+///
+/// Refuses to replace an existing file unless `overwrite` is set.
 pub(crate) fn safe_write(path: &Path, data: &[u8], overwrite: bool) -> anyhow::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
 
-    if overwrite && path.exists() {
-        let mut tmp = path.as_os_str().to_os_string();
-        tmp.push(".slimg_tmp");
-        let tmp = PathBuf::from(tmp);
-        fs::write(&tmp, data)?;
-        fs::rename(&tmp, path)?;
-    } else {
-        fs::write(path, data)?;
+    if !overwrite && path.exists() {
+        anyhow::bail!(
+            "{} already exists (pass --overwrite to replace it)",
+            path.display()
+        );
+    }
+
+    let mut tmp = path.as_os_str().to_os_string();
+    tmp.push(".slimg_tmp");
+    let tmp = PathBuf::from(tmp);
+    fs::write(&tmp, data)?;
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e.into());
+    }
+
+    Ok(())
+}
+
+/// Validate and prepare the `--output` argument for a run.
+///
+/// When processing multiple files (or a directory input), `--output` must be
+/// a directory; it is created if it does not exist yet. Otherwise every
+/// worker would race to write the same single file.
+pub(crate) fn resolve_output(
+    input: &Path,
+    output: Option<&Path>,
+    file_count: usize,
+) -> anyhow::Result<Option<PathBuf>> {
+    let Some(out) = output else {
+        return Ok(None);
+    };
+
+    let is_batch = file_count > 1 || input.is_dir();
+    if is_batch {
+        if out.exists() && !out.is_dir() {
+            anyhow::bail!(
+                "--output must be a directory when processing multiple files, \
+                 but {} is a file",
+                out.display()
+            );
+        }
+        fs::create_dir_all(out)?;
+    }
+
+    Ok(Some(out.to_path_buf()))
+}
+
+/// Result of processing a single file inside a batch.
+pub(crate) enum FileOutcome {
+    Written {
+        out: PathBuf,
+        original_size: u64,
+        new_size: u64,
+    },
+    Skipped {
+        reason: String,
+    },
+}
+
+/// Shared batch driver used by every subcommand: collects input files,
+/// validates the output target, runs `process` for each file on the rayon
+/// pool, reports per-file results and a failure summary, and returns an
+/// error if any file failed.
+pub(crate) fn run_batch<F>(
+    input: &Path,
+    output: Option<&Path>,
+    recursive: bool,
+    jobs: Option<usize>,
+    verb: &str,
+    process: F,
+) -> anyhow::Result<()>
+where
+    F: Fn(&Path, Option<&Path>) -> anyhow::Result<FileOutcome> + Sync,
+{
+    use rayon::prelude::*;
+
+    let files = collect_files(input, recursive)?;
+    if files.is_empty() {
+        anyhow::bail!("no image files found in {}", input.display());
+    }
+
+    let output = resolve_output(input, output, files.len())?;
+    configure_thread_pool(jobs)?;
+
+    let pb = make_progress_bar(files.len());
+    let errors = ErrorCollector::new();
+
+    files.par_iter().for_each(|file| {
+        match process(file, output.as_deref()) {
+            Ok(FileOutcome::Written {
+                out,
+                original_size,
+                new_size,
+            }) => {
+                let ratio = if original_size > 0 {
+                    (new_size as f64 / original_size as f64) * 100.0
+                } else {
+                    0.0
+                };
+                pb.println(format!(
+                    "{} -> {} ({} -> {} bytes, {:.1}%)",
+                    file.display(),
+                    out.display(),
+                    original_size,
+                    new_size,
+                    ratio,
+                ));
+            }
+            Ok(FileOutcome::Skipped { reason }) => {
+                pb.println(format!("{} -> skipped ({reason})", file.display()));
+            }
+            Err(e) => errors.push(file, &e),
+        }
+        pb.inc(1);
+    });
+
+    let fail_count = errors.summarize(&pb);
+    pb.finish_and_clear();
+
+    if fail_count > 0 {
+        anyhow::bail!("{fail_count} file(s) failed to {verb}");
     }
 
     Ok(())
@@ -168,10 +284,16 @@ fn collect_dir(dir: &Path, recursive: bool, out: &mut Vec<PathBuf>) -> anyhow::R
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
+        // `file_type()` does not follow symlinks: symlinked directories are
+        // never recursed into (avoids symlink cycles), while symlinks to
+        // regular files are still processed.
+        let file_type = entry.file_type()?;
 
-        if path.is_dir() && recursive {
-            collect_dir(&path, recursive, out)?;
-        } else if path.is_file()
+        if file_type.is_dir() {
+            if recursive {
+                collect_dir(&path, recursive, out)?;
+            }
+        } else if (file_type.is_file() || path.is_file())
             && let Some(ext) = path.extension().and_then(|e| e.to_str())
             && IMAGE_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str())
         {
@@ -265,6 +387,77 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), b"data");
     }
 
+    #[test]
+    fn safe_write_refuses_existing_without_overwrite() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("file.jpg");
+        fs::write(&path, b"original").unwrap();
+
+        let result = safe_write(&path, b"new", false);
+
+        assert!(result.is_err(), "must refuse to clobber without overwrite");
+        assert_eq!(fs::read(&path).unwrap(), b"original");
+    }
+
+    #[test]
+    fn safe_write_new_file_is_atomic() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("out.bin");
+
+        safe_write(&path, b"data", false).unwrap();
+
+        let tmp = dir.path().join("out.bin.slimg_tmp");
+        assert!(!tmp.exists(), "temp file should be cleaned up after rename");
+    }
+
+    // ── resolve_output ──────────────────────────────────────
+
+    #[test]
+    fn resolve_output_none_passthrough() {
+        let dir = TempDir::new().unwrap();
+        assert_eq!(resolve_output(dir.path(), None, 5).unwrap(), None);
+    }
+
+    #[test]
+    fn resolve_output_batch_rejects_file_target() {
+        let dir = TempDir::new().unwrap();
+        let target = dir.path().join("out.webp");
+        fs::write(&target, b"").unwrap();
+
+        let result = resolve_output(dir.path(), Some(&target), 3);
+        assert!(
+            result.is_err(),
+            "batch output onto a single file must be rejected"
+        );
+    }
+
+    #[test]
+    fn resolve_output_batch_creates_missing_directory() {
+        let dir = TempDir::new().unwrap();
+        let target = dir.path().join("newdir");
+
+        let resolved = resolve_output(dir.path(), Some(&target), 3).unwrap();
+
+        assert_eq!(resolved, Some(target.clone()));
+        assert!(
+            target.is_dir(),
+            "missing output directory should be created"
+        );
+    }
+
+    #[test]
+    fn resolve_output_single_file_keeps_file_target() {
+        let dir = TempDir::new().unwrap();
+        let input = dir.path().join("in.jpg");
+        fs::write(&input, b"").unwrap();
+        let target = dir.path().join("out.webp");
+
+        let resolved = resolve_output(&input, Some(&target), 1).unwrap();
+
+        assert_eq!(resolved, Some(target.clone()));
+        assert!(!target.exists(), "single-file output must not become a dir");
+    }
+
     // ── ErrorCollector ──────────────────────────────────────
 
     #[test]
@@ -342,6 +535,36 @@ mod tests {
 
         let recursive = collect_files(dir.path(), true).unwrap();
         assert_eq!(recursive.len(), 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_files_does_not_follow_symlinked_dirs() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("a.jpg"), b"").unwrap();
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("b.png"), b"").unwrap();
+        // Symlink cycle: sub/loop -> parent dir. Following it would recurse
+        // forever.
+        std::os::unix::fs::symlink(dir.path(), sub.join("loop")).unwrap();
+
+        let files = collect_files(dir.path(), true).unwrap();
+
+        assert_eq!(files.len(), 2, "symlinked dirs must not be recursed into");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_files_includes_symlinked_files() {
+        let dir = TempDir::new().unwrap();
+        let real = dir.path().join("real.jpg");
+        fs::write(&real, b"").unwrap();
+        std::os::unix::fs::symlink(&real, dir.path().join("link.jpg")).unwrap();
+
+        let files = collect_files(dir.path(), false).unwrap();
+
+        assert_eq!(files.len(), 2, "symlinks to regular files are processed");
     }
 
     // ── parse_size ────────────────────────────────────────────

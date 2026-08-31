@@ -22,6 +22,7 @@ const SAMPLE_SIZE_ENV: &str = "SLIMG_BENCH_SAMPLE_SIZE";
 const MEASUREMENT_SECS_ENV: &str = "SLIMG_BENCH_MEASUREMENT_SECONDS";
 const WARMUP_SECS_ENV: &str = "SLIMG_BENCH_WARMUP_SECONDS";
 
+#[allow(unused_macros)]
 macro_rules! slimg_criterion_group {
     ($name:ident, $($target:path),+ $(,)?) => {
         criterion::criterion_group! {
@@ -32,6 +33,7 @@ macro_rules! slimg_criterion_group {
     };
 }
 
+#[allow(unused_imports)]
 pub(crate) use slimg_criterion_group;
 
 #[derive(Debug, Clone, Serialize)]
@@ -111,10 +113,14 @@ pub fn fixture_info(image: &ImageData) -> Result<FixtureInfo, MetricsError> {
     })
 }
 
-pub fn compression_metrics(image: &ImageData, encoded_bytes: usize) -> Result<CompressionMetrics, MetricsError> {
+pub fn compression_metrics(
+    image: &ImageData,
+    encoded_bytes: usize,
+) -> Result<CompressionMetrics, MetricsError> {
     let pixel_count = pixel_count(image.width, image.height)?;
     let raw_bytes = raw_byte_len(image.width, image.height)?;
-    let encoded_bytes = u64::try_from(encoded_bytes).map_err(|_| MetricsError::ArithmeticOverflow)?;
+    let encoded_bytes =
+        u64::try_from(encoded_bytes).map_err(|_| MetricsError::ArithmeticOverflow)?;
     if encoded_bytes == 0 {
         return Err(MetricsError::ZeroEncodedBytes);
     }
@@ -128,7 +134,10 @@ pub fn compression_metrics(image: &ImageData, encoded_bytes: usize) -> Result<Co
     })
 }
 
-pub fn size_change_metrics(input_bytes: usize, output_bytes: usize) -> Result<SizeChangeMetrics, MetricsError> {
+pub fn size_change_metrics(
+    input_bytes: usize,
+    output_bytes: usize,
+) -> Result<SizeChangeMetrics, MetricsError> {
     let input_bytes = u64::try_from(input_bytes).map_err(|_| MetricsError::ArithmeticOverflow)?;
     let output_bytes = u64::try_from(output_bytes).map_err(|_| MetricsError::ArithmeticOverflow)?;
     if input_bytes == 0 {
@@ -143,7 +152,12 @@ pub fn size_change_metrics(input_bytes: usize, output_bytes: usize) -> Result<Si
     })
 }
 
-pub fn print_compression_table(title: &str, fixture: &FixtureInfo, quality: u8, rows: &[CompressionRow]) {
+pub fn print_compression_table(
+    title: &str,
+    fixture: &FixtureInfo,
+    quality: u8,
+    rows: &[CompressionRow],
+) {
     println!();
     println!("{title}");
     println!(
@@ -192,8 +206,7 @@ pub fn write_json_report<T: Serialize>(name: &str, report: &T) -> io::Result<Pat
     }
 
     let mut file = File::create(&path)?;
-    serde_json::to_writer_pretty(&mut file, report)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    serde_json::to_writer_pretty(&mut file, report).map_err(io::Error::other)?;
     file.write_all(b"\n")?;
     Ok(path)
 }

@@ -42,8 +42,10 @@ slimg convert ./images --format webp --recursive --jobs 4
 같은 포맷으로 재인코딩하여 파일 크기를 줄입니다.
 
 ```
-slimg optimize photo.jpg
+slimg optimize photo.jpg --overwrite
 ```
+
+`--output` 없이 실행하면 원본 파일을 제자리에서 교체하므로, `--overwrite`(제자리 교체 확인) 또는 `--output`(다른 위치에 저장) 중 하나가 필요합니다. 제자리 최적화 시 결과가 원본보다 작지 않으면 해당 파일은 건너뜁니다.
 
 | 옵션 | 설명 |
 |------|------|
@@ -51,22 +53,22 @@ slimg optimize photo.jpg
 | `--output`, `-o` | 출력 경로 (파일 또는 디렉토리) |
 | `--recursive` | 하위 디렉토리 포함 처리 |
 | `--jobs`, `-j` | 병렬 작업 수 (기본값: 전체 코어) |
-| `--overwrite` | 원본 파일 덮어쓰기 |
+| `--overwrite` | 기존 파일 덮어쓰기 (제자리 최적화 시 필수) |
 
 **예시:**
 
 ```bash
-# JPEG 최적화 (품질 80)
-slimg optimize photo.jpg
-
-# 원본 파일 덮어쓰기
+# 제자리 최적화 (원본을 원자적으로 교체)
 slimg optimize photo.jpg --overwrite
 
-# 디렉토리 내 이미지 일괄 최적화
-slimg optimize ./images --quality 70 --recursive
+# 별도 디렉토리에 저장 (원본 유지)
+slimg optimize ./images --quality 70 --output ./optimized --recursive
+
+# 디렉토리 내 이미지 일괄 제자리 최적화
+slimg optimize ./images --quality 70 --recursive --overwrite
 
 # 병렬 작업 수를 2개로 제한 (대용량 이미지에 유용)
-slimg optimize ./images --recursive --jobs 2
+slimg optimize ./images --recursive --jobs 2 --overwrite
 ```
 
 ## resize
@@ -206,7 +208,9 @@ slimg convert ./images --format webp --recursive --jobs 4
 
 **에러 처리** — 파일 처리 중 오류가 발생하면 해당 파일을 건너뛰고 나머지를 계속 처리합니다. 실패한 파일 목록은 마지막에 요약 출력됩니다.
 
-**안전한 덮어쓰기** — `--overwrite` 사용 시, 임시 파일에 먼저 쓴 뒤 성공하면 이름을 변경합니다. 인코딩이 실패하면 원본 파일이 보존됩니다.
+여러 파일을 처리할 때 `--output`은 디렉토리여야 하며, 없으면 자동으로 생성됩니다. 재귀 탐색 시 심볼릭 링크 디렉토리는 따라가지 않습니다 (일반 파일에 대한 심볼릭 링크는 처리됩니다).
+
+**덮어쓰기 안전성** — `--overwrite` 없이는 기존 파일을 절대 교체하지 않습니다. 모든 쓰기는 임시 파일에 먼저 쓴 뒤 성공 시 이름을 변경하므로, 쓰기 도중 중단되어도 손상된 파일이 남지 않습니다.
 
 ## 라이브러리 사용
 

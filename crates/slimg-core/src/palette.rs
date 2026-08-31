@@ -63,9 +63,7 @@ pub fn analyze_palette_suitability(image: &ImageData) -> PaletteStats {
 
     let unique_color_count = counts.len() as u32;
     let top_256_color_coverage = top_color_coverage(&counts, total_pixels);
-    let recommendation = if unique_color_count <= 256 {
-        PaletteRecommendation::On
-    } else if top_256_color_coverage >= 0.98 {
+    let recommendation = if unique_color_count <= 256 || top_256_color_coverage >= 0.98 {
         PaletteRecommendation::On
     } else if top_256_color_coverage >= 0.90 {
         PaletteRecommendation::Review

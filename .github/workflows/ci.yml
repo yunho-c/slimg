@@ -1,31 +1,46 @@
-name: Python Bindings
+name: CI
 
 on:
   push:
     branches: [main]
     paths:
-      - 'crates/slimg-ffi/**'
-      - 'crates/slimg-core/**'
-      - 'crates/libjxl-sys/**'
-      - 'bindings/python/**'
-      - '.github/workflows/python-bindings.yml'
+      - 'crates/**'
+      - 'cli/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci.yml'
   pull_request:
     paths:
-      - 'crates/slimg-ffi/**'
-      - 'crates/slimg-core/**'
-      - 'crates/libjxl-sys/**'
-      - 'bindings/python/**'
-      - '.github/workflows/python-bindings.yml'
+      - 'crates/**'
+      - 'cli/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci.yml'
+
+env:
+  CARGO_TERM_COLOR: always
+  SYSTEM_DEPS_DAV1D_BUILD_INTERNAL: always
 
 jobs:
-  build-and-test:
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+  test:
     runs-on: ${{ matrix.os }}
-    env:
-      SYSTEM_DEPS_DAV1D_BUILD_INTERNAL: always
     strategy:
+      fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
-        python-version: ['3.9', '3.13']
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -34,18 +49,11 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
-        with:
-          # Both interpreter versions build the same cdylib; share one cache
-          # per OS instead of two.
-          key: ${{ matrix.os }}
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
 
       - name: Install system dependencies (macOS)
         if: runner.os == 'macOS'
@@ -78,18 +86,8 @@ jobs:
           echo "CC=cl" >> $GITHUB_ENV
           echo "CXX=cl" >> $GITHUB_ENV
 
-      - name: Install maturin and pytest
-        run: pip install maturin pytest
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Build wheel
-        working-directory: bindings/python
-        run: maturin build --out dist
-
-      - name: Install wheel
-        working-directory: bindings/python
-        shell: bash
-        run: pip install dist/*.whl
-
-      - name: Run tests
-        working-directory: bindings/python
-        run: pytest tests/ -v
+      - name: Test
+        run: cargo test --workspace

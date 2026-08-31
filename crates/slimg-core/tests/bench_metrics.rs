@@ -1,7 +1,7 @@
 #[path = "../benches/support/mod.rs"]
 mod support;
 
-use support::{compression_metrics, size_change_metrics, MetricsError};
+use support::{MetricsError, compression_metrics, size_change_metrics};
 
 use slimg_core::ImageData;
 

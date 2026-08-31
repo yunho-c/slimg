@@ -1,13 +1,18 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
 use slimg_core::{
-    CropMode, EncodeOptions, ExtendMode, FillColor, Format, ImageData, PipelineOptions, ResizeMode,
-    codec::get_codec,
+    codec::get_codec, CropMode, EncodeOptions, ExtendMode, FillColor, Format, ImageData,
+    PipelineOptions, ResizeMode,
 };
+use tauri::Emitter;
+
+/// Shared cancellation flag for the currently running batch.
+#[derive(Default)]
+pub struct BatchCancel(AtomicBool);
 
 // ── Constants ─────────────────────────────────────────────────
 
@@ -84,16 +89,20 @@ pub struct BatchProgress {
 // ── Commands ───────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn scan_directory(path: String) -> Result<Vec<String>, String> {
-    let dir_path = Path::new(&path);
-    if !dir_path.is_dir() {
-        return Err(format!("Not a directory: {}", path));
-    }
+pub async fn scan_directory(path: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir_path = Path::new(&path);
+        if !dir_path.is_dir() {
+            return Err(format!("Not a directory: {}", path));
+        }
 
-    let mut files = Vec::new();
-    collect_images(dir_path, &mut files)?;
-    files.sort();
-    Ok(files)
+        let mut files = Vec::new();
+        collect_images(dir_path, &mut files)?;
+        files.sort();
+        Ok(files)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
 }
 
 fn collect_images(dir: &Path, out: &mut Vec<String>) -> Result<(), String> {
@@ -148,14 +157,20 @@ pub async fn load_image(path: String) -> Result<ImageInfo, String> {
 }
 
 #[tauri::command]
-pub async fn process_image(input: String, options: ProcessOptions) -> Result<ProcessResult, String> {
+pub async fn process_image(
+    input: String,
+    options: ProcessOptions,
+) -> Result<ProcessResult, String> {
     tauri::async_runtime::spawn_blocking(move || process_single_file(&input, &options))
         .await
         .map_err(|e| format!("Task failed: {}", e))?
 }
 
 #[tauri::command]
-pub async fn preview_image(input: String, options: ProcessOptions) -> Result<PreviewResult, String> {
+pub async fn preview_image(
+    input: String,
+    options: ProcessOptions,
+) -> Result<PreviewResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let input_path = Path::new(&input);
 
@@ -188,53 +203,83 @@ pub async fn process_batch(
     inputs: Vec<String>,
     options: ProcessOptions,
     window: tauri::Window,
+    cancel: tauri::State<'_, BatchCancel>,
 ) -> Result<(), String> {
     let total = inputs.len();
+    cancel.0.store(false, Ordering::SeqCst);
 
     for (index, file_path) in inputs.iter().enumerate() {
-        let progress_processing = BatchProgress {
-            index,
-            total,
-            file_path: file_path.clone(),
-            status: "processing".to_string(),
-            result: None,
-            error: None,
-        };
-        let _ = window.emit("batch-progress", &progress_processing);
+        if cancel.0.load(Ordering::SeqCst) {
+            // Mark every unprocessed file as cancelled and stop.
+            for (rest_index, rest_path) in inputs.iter().enumerate().skip(index) {
+                emit_progress(
+                    &window,
+                    BatchProgress {
+                        index: rest_index,
+                        total,
+                        file_path: rest_path.clone(),
+                        status: "cancelled".to_string(),
+                        result: None,
+                        error: None,
+                    },
+                );
+            }
+            return Ok(());
+        }
+
+        emit_progress(
+            &window,
+            BatchProgress {
+                index,
+                total,
+                file_path: file_path.clone(),
+                status: "processing".to_string(),
+                result: None,
+                error: None,
+            },
+        );
 
         let fp = file_path.clone();
         let opts = options.clone();
+        // A panic inside the blocking task must fail this file only, not
+        // abort the remaining batch.
         let result = tauri::async_runtime::spawn_blocking(move || process_single_file(&fp, &opts))
             .await
-            .map_err(|e| format!("Task failed: {}", e))?;
+            .unwrap_or_else(|e| Err(format!("{}: task panicked: {}", file_path, e)));
 
-        match result {
-            Ok(result) => {
-                let progress_completed = BatchProgress {
-                    index,
-                    total,
-                    file_path: file_path.clone(),
-                    status: "completed".to_string(),
-                    result: Some(result),
-                    error: None,
-                };
-                let _ = window.emit("batch-progress", &progress_completed);
-            }
-            Err(err) => {
-                let progress_error = BatchProgress {
-                    index,
-                    total,
-                    file_path: file_path.clone(),
-                    status: "error".to_string(),
-                    result: None,
-                    error: Some(err),
-                };
-                let _ = window.emit("batch-progress", &progress_error);
-            }
-        }
+        let progress = match result {
+            Ok(result) => BatchProgress {
+                index,
+                total,
+                file_path: file_path.clone(),
+                status: "completed".to_string(),
+                result: Some(result),
+                error: None,
+            },
+            Err(err) => BatchProgress {
+                index,
+                total,
+                file_path: file_path.clone(),
+                status: "error".to_string(),
+                result: None,
+                error: Some(err),
+            },
+        };
+        emit_progress(&window, progress);
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_batch(cancel: tauri::State<'_, BatchCancel>) {
+    cancel.0.store(true, Ordering::SeqCst);
+}
+
+fn emit_progress(window: &tauri::Window, progress: BatchProgress) {
+    if let Err(e) = window.emit("batch-progress", &progress) {
+        eprintln!("failed to emit batch progress: {e}");
+    }
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -242,19 +287,33 @@ pub async fn process_batch(
 fn process_single_file(input: &str, options: &ProcessOptions) -> Result<ProcessResult, String> {
     let input_path = Path::new(input);
 
-    let raw_bytes = std::fs::read(input_path).map_err(|e| e.to_string())?;
+    let raw_bytes = std::fs::read(input_path).map_err(|e| format!("{}: {}", input, e))?;
     let original_size = raw_bytes.len() as u64;
 
-    let (image, source_format) = slimg_core::decode(&raw_bytes).map_err(|e| e.to_string())?;
+    let (image, source_format) =
+        slimg_core::decode(&raw_bytes).map_err(|e| format!("{}: {}", input, e))?;
 
     let pipeline_result = if matches!(options.operation, Operation::Optimize) {
-        slimg_core::optimize(&raw_bytes, options.quality).map_err(|e| e.to_string())?
+        slimg_core::optimize(&raw_bytes, options.quality)
+            .map_err(|e| format!("{}: {}", input, e))?
     } else {
         let pipeline_options = build_pipeline_options(options, source_format)?;
-        slimg_core::convert(&image, &pipeline_options).map_err(|e| e.to_string())?
+        slimg_core::convert(&image, &pipeline_options).map_err(|e| format!("{}: {}", input, e))?
     };
 
     let output_dir = options.output_dir.as_deref().map(Path::new);
+    if let Some(dir) = output_dir {
+        // output_path treats a non-directory target as a single file path,
+        // which would collapse every batch output onto it. Make sure the
+        // configured output directory actually exists as a directory.
+        if dir.exists() && !dir.is_dir() {
+            return Err(format!(
+                "output directory is not a directory: {}",
+                dir.display()
+            ));
+        }
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {}", dir.display(), e))?;
+    }
     let mut out_path = slimg_core::output_path(input_path, pipeline_result.format, output_dir);
 
     if !options.overwrite && out_path.exists() {
@@ -263,7 +322,7 @@ fn process_single_file(input: &str, options: &ProcessOptions) -> Result<ProcessR
 
     pipeline_result
         .save(&out_path)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("{}: {}", out_path.display(), e))?;
 
     Ok(ProcessResult {
         output_path: out_path.to_string_lossy().to_string(),
@@ -285,42 +344,43 @@ fn build_pipeline_options(
     };
 
     let resize = match options.operation {
-        Operation::Resize => match options.resize_mode.as_deref() {
-            Some("width") => options.width.map(ResizeMode::Width),
-            Some("height") => options.height.map(ResizeMode::Height),
-            Some("exact") => Some(ResizeMode::Exact(
-                options.width.unwrap_or(0),
-                options.height.unwrap_or(0),
-            )),
-            Some("fit") => Some(ResizeMode::Fit(
-                options.width.unwrap_or(0),
-                options.height.unwrap_or(0),
-            )),
-            _ => options.width.map(ResizeMode::Width),
-        },
+        Operation::Resize => Some(match options.resize_mode.as_deref().unwrap_or("width") {
+            "width" => ResizeMode::Width(require(options.width, "width")?),
+            "height" => ResizeMode::Height(require(options.height, "height")?),
+            "exact" => ResizeMode::Exact(
+                require(options.width, "width")?,
+                require(options.height, "height")?,
+            ),
+            "fit" => ResizeMode::Fit(
+                require(options.width, "width")?,
+                require(options.height, "height")?,
+            ),
+            other => return Err(format!("Unknown resize mode: {}", other)),
+        }),
         _ => None,
     };
 
     let crop = match options.operation {
-        Operation::Crop => match options.crop_mode.as_deref() {
-            Some("region") => Some(CropMode::Region {
+        Operation::Crop => Some(match options.crop_mode.as_deref().unwrap_or("aspect") {
+            "region" => CropMode::Region {
                 x: options.x.unwrap_or(0),
                 y: options.y.unwrap_or(0),
-                width: options.width.unwrap_or(0),
-                height: options.height.unwrap_or(0),
-            }),
-            _ => Some(CropMode::AspectRatio {
-                width: options.width.unwrap_or(1),
-                height: options.height.unwrap_or(1),
-            }),
-        },
+                width: require(options.width, "width")?,
+                height: require(options.height, "height")?,
+            },
+            "aspect" => CropMode::AspectRatio {
+                width: require(options.width, "aspect width")?,
+                height: require(options.height, "aspect height")?,
+            },
+            other => return Err(format!("Unknown crop mode: {}", other)),
+        }),
         _ => None,
     };
 
     let extend = match options.operation {
         Operation::Extend => Some(ExtendMode::AspectRatio {
-            width: options.width.unwrap_or(1),
-            height: options.height.unwrap_or(1),
+            width: require(options.width, "aspect width")?,
+            height: require(options.height, "aspect height")?,
         }),
         _ => None,
     };
@@ -334,11 +394,21 @@ fn build_pipeline_options(
     Ok(PipelineOptions {
         format,
         quality: options.quality,
+        effort: None,
+        png_palette: Default::default(),
+        threads: None,
         resize,
         crop,
         extend,
         fill_color,
     })
+}
+
+fn require(value: Option<u32>, name: &str) -> Result<u32, String> {
+    match value {
+        Some(v) if v > 0 => Ok(v),
+        _ => Err(format!("{} is required", name)),
+    }
 }
 
 fn parse_format(s: &str) -> Result<Format, String> {
@@ -373,6 +443,9 @@ fn encode_as_png(image: &ImageData) -> Result<Vec<u8>, String> {
     let codec = get_codec(Format::Png);
     let opts = EncodeOptions {
         quality: THUMBNAIL_PNG_COMPRESSION,
+        effort: None,
+        png_palette: Default::default(),
+        threads: None,
     };
     codec.encode(image, &opts).map_err(|e| e.to_string())
 }

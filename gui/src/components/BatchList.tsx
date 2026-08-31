@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle, Loader2, Circle } from "lucide-react";
+import { Ban, CheckCircle2, XCircle, Loader2, Circle } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { formatBytes, calcSavingsPercent } from "@/lib/format";
 import { basename } from "@/lib/path";
@@ -24,6 +24,8 @@ function StatusIcon({ status }: { status: BatchItem["status"] }) {
       );
     case "error":
       return <XCircle className="h-4 w-4 text-destructive" />;
+    case "cancelled":
+      return <Ban className="h-4 w-4 text-muted-foreground" />;
   }
 }
 
@@ -64,6 +66,10 @@ export function BatchList({
     (item) => item.status === "completed"
   ).length;
   const errorCount = items.filter((item) => item.status === "error").length;
+  const cancelledCount = items.filter(
+    (item) => item.status === "cancelled"
+  ).length;
+  const doneCount = completedCount + errorCount + cancelledCount;
 
   return (
     <div className="space-y-4">
@@ -73,7 +79,7 @@ export function BatchList({
             {progress < 100 ? "Processing..." : "Complete"}
           </span>
           <span className="text-muted-foreground">
-            {completedCount + errorCount} / {items.length}
+            {doneCount} / {items.length}
           </span>
         </div>
         <Progress value={progress} />
@@ -142,6 +148,14 @@ export function BatchList({
                 Errors:{" "}
                 <span className="font-medium text-destructive">
                   {errorCount}
+                </span>
+              </span>
+            )}
+            {cancelledCount > 0 && (
+              <span className="text-muted-foreground">
+                Cancelled:{" "}
+                <span className="font-medium text-foreground">
+                  {cancelledCount}
                 </span>
               </span>
             )}

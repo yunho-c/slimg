@@ -1,11 +1,11 @@
 [package]
 name = "slimg-core"
-version = "0.5.1"
-edition = "2024"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 description = "Image optimization library — encode, decode, convert, resize with MozJPEG, OxiPNG, WebP, AVIF, and QOI"
-repository = "https://github.com/clroot/slimg"
-homepage = "https://github.com/clroot/slimg"
+repository.workspace = true
+homepage.workspace = true
 readme = "README.md"
 keywords = ["image", "optimization", "compression", "webp", "avif"]
 categories = ["multimedia::images", "encoding"]
@@ -19,7 +19,7 @@ pngquant = ["dep:imagequant", "dep:png"]
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "webp"] }
 imagequant = { version = "4.4.1", default-features = false, optional = true }
-libjxl-sys = { version = "0.1", path = "../libjxl-sys", package = "slimg-libjxl-sys" }
+libjxl-sys = { version = "0.1.1", path = "../libjxl-sys", package = "slimg-libjxl-sys" }
 mozjpeg = { version = "0.10", optional = true }
 oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }
 png = { version = "0.18", optional = true }
@@ -30,7 +30,11 @@ rgb = "0.8"
 thiserror = "2"
 webp = { version = "0.3", default-features = false }
 zenavif = "0.1.5"
-zenpixels-convert = { version = "0.2", features = ["rgb"] }
+# Newer 0.2.x releases currently select magetypes code that requires unstable
+# ARM f16 intrinsics on stable Rust. Keep the known-working pair explicit for
+# both the workspace lockfile and the GUI's separate lockfile.
+magetypes = "=0.9.23"
+zenpixels-convert = { version = "=0.2.11", features = ["rgb"] }
 
 [dev-dependencies]
 criterion = "0.5"

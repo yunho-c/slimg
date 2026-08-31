@@ -44,7 +44,7 @@ export interface BatchProgress {
   index: number;
   total: number;
   file_path: string;
-  status: "processing" | "completed" | "error";
+  status: "processing" | "completed" | "error" | "cancelled";
   result?: ProcessResult;
   error?: string;
 }
@@ -58,4 +58,5 @@ export const api = {
     invoke<PreviewResult>("preview_image", { input, options }),
   processBatch: (inputs: string[], options: ProcessOptions) =>
     invoke<void>("process_batch", { inputs, options }),
+  cancelBatch: () => invoke<void>("cancel_batch"),
 };

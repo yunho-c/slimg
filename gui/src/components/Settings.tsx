@@ -43,7 +43,6 @@ export function Settings({ settings, onUpdate, onReset }: SettingsProps) {
               <Input
                 id="output-dir"
                 value={settings.outputDir}
-                onChange={(e) => onUpdate({ outputDir: e.target.value })}
                 placeholder="Same as input file"
                 className="flex-1"
                 readOnly
