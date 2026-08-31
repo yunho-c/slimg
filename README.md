@@ -139,6 +139,10 @@ let (image, format) = decode_file(Path::new("photo.jpg"))?;
 let result = convert(&image, &PipelineOptions {
     format: Format::WebP,
     quality: 80,
+    effort: None,
+    png_palette: PngPaletteMode::Off,
+    jxl_encoder: JxlEncoderPreference::Libjxl,
+    threads: None,
     resize: None,
     crop: None,
     extend: None,

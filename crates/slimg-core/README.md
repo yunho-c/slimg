@@ -34,16 +34,35 @@ The `jpegli` backend currently requires the vendored `libjxl` source tree and is
 
 On macOS, JPEG XL encoding can opt into GJXL's experimental C API while
 retaining libjxl for decoding and unsupported encode requests. During the
-experimental local integration, keep GJXL checked out beside Slimg, then
-enable the feature:
+experimental local integration, keep GJXL checked out at `../gjxl-rust`
+relative to the Slimg checkout, then enable the feature:
 
 ```bash
 cargo test -p slimg-core --features jxl-encoder-gjxl
 ```
 
-The feature only supports macOS builds. It uses GJXL's `AUTO` execution policy
-and falls back to libjxl for lossless, alpha, an explicit thread budget, or an
-unsupported/unavailable GJXL request. Other GJXL failures remain errors.
+Enabling the feature only compiles the optional backend; libjxl remains the
+runtime default. Request GJXL for an individual encode through
+`JxlEncoderPreference::PreferGjxl`:
+
+```rust
+use slimg_core::{EncodeOptions, JxlEncoderPreference};
+use slimg_core::codec::jxl::{encode_with_diagnostics, gjxl_backend_compiled};
+
+assert!(gjxl_backend_compiled());
+
+let options = EncodeOptions {
+    quality: 80,
+    jxl_encoder: JxlEncoderPreference::PreferGjxl,
+    ..EncodeOptions::default()
+};
+let outcome = encode_with_diagnostics(&image, &options)?;
+```
+
+The feature only supports native macOS builds. GJXL uses its `AUTO` execution
+policy and falls back to libjxl when the feature is absent or the request is
+lossless, contains non-opaque alpha, specifies a thread budget, or reports an
+unsupported/unavailable GJXL capability. Other GJXL failures remain errors.
 
 Experiments and benchmarks should call
 `slimg_core::codec::jxl::encode_with_diagnostics` and record its backend and
@@ -64,6 +83,8 @@ let result = convert(&image, &PipelineOptions {
     format: Format::WebP,
     quality: 80,
     effort: None,
+    png_palette: PngPaletteMode::Off,
+    jxl_encoder: JxlEncoderPreference::Libjxl,
     threads: None,
     resize: None,
     crop: None,
@@ -77,6 +98,8 @@ let result = convert(&image, &PipelineOptions {
     format: Format::Avif,
     quality: 60,
     effort: Some(75),
+    png_palette: PngPaletteMode::Off,
+    jxl_encoder: JxlEncoderPreference::Libjxl,
     threads: None,
     resize: Some(ResizeMode::Width(800)),
     crop: None,
@@ -89,6 +112,8 @@ let data = std::fs::read("photo.jpg")?;
 let optimized = optimize_with_options(&data, EncodeOptions {
     quality: 75,
     effort: Some(75),
+    png_palette: PngPaletteMode::Off,
+    jxl_encoder: JxlEncoderPreference::Libjxl,
     threads: None,
 })?;
 optimized.save(Path::new("photo.jpg"))?;

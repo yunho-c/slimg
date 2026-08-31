@@ -154,6 +154,9 @@ If you run `just bench-natural-sweep-jpegli`, the `JPEG` curve uses the `jpegli`
 JXL benchmark and sweep labels include the observed encoder backend and any
 fallback reason. A corpus run aborts if its JXL samples mix GJXL and libjxl, so
 an experimental GJXL measurement cannot silently include fallback samples.
+The natural-image benchmark and resolution sweep explicitly request
+`JxlEncoderPreference::PreferGjxl`; ordinary library and CLI encodes continue
+to default to libjxl even when the GJXL feature is compiled.
 
 Outputs:
 
