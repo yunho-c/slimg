@@ -59,6 +59,7 @@ pub fn run(args: OptimizeArgs) -> anyhow::Result<()> {
                     quality: args.quality,
                     effort: args.effort,
                     png_palette: Default::default(),
+                    jxl_encoder: Default::default(),
                     threads: None,
                 },
             )?;

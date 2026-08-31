@@ -94,6 +94,7 @@ mod tests {
             quality: 90,
             effort: None,
             png_palette: Default::default(),
+            jxl_encoder: Default::default(),
             threads: None,
         };
 
@@ -121,6 +122,7 @@ mod tests {
                     quality: 95,
                     effort: None,
                     png_palette: Default::default(),
+                    jxl_encoder: Default::default(),
                     threads: None,
                 },
             )
@@ -132,6 +134,7 @@ mod tests {
                     quality: 20,
                     effort: None,
                     png_palette: Default::default(),
+                    jxl_encoder: Default::default(),
                     threads: None,
                 },
             )
@@ -156,6 +159,7 @@ mod tests {
                     quality: 100,
                     effort: None,
                     png_palette: Default::default(),
+                    jxl_encoder: Default::default(),
                     threads: None,
                 },
             )
@@ -176,6 +180,7 @@ mod tests {
                     quality: 100,
                     effort: Some(50),
                     png_palette: Default::default(),
+                    jxl_encoder: Default::default(),
                     threads: None,
                 },
             )

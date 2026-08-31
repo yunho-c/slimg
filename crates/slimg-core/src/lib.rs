@@ -7,7 +7,7 @@ pub mod palette;
 pub mod pipeline;
 pub mod resize;
 
-pub use codec::{Codec, EncodeOptions, ImageData, PngPaletteMode};
+pub use codec::{Codec, EncodeOptions, ImageData, JxlEncoderPreference, PngPaletteMode};
 pub use crop::CropMode;
 pub use error::{Error, Result};
 pub use extend::{ExtendMode, FillColor};

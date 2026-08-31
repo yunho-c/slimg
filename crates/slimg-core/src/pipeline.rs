@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::codec::{EncodeOptions, ImageData, PngPaletteMode, get_codec};
+use crate::codec::{
+    EncodeOptions, ImageData, JxlEncoderPreference, PngPaletteMode, get_codec,
+};
 use crate::crop::{self, CropMode};
 use crate::error::{Error, Result};
 use crate::extend::{self, ExtendMode, FillColor};
@@ -21,6 +23,8 @@ pub struct PipelineOptions {
     pub effort: Option<u8>,
     /// Palette quantization mode for PNG output.
     pub png_palette: PngPaletteMode,
+    /// Preferred encoder for JPEG XL output.
+    pub jxl_encoder: JxlEncoderPreference,
     /// Optional thread budget for internally-threaded encoders.
     pub threads: Option<usize>,
     /// Optional resize to apply before encoding.
@@ -97,12 +101,7 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
     };
 
     let codec = get_codec(options.format);
-    let encode_opts = EncodeOptions {
-        quality: options.quality,
-        effort: options.effort,
-        png_palette: options.png_palette,
-        threads: options.threads,
-    };
+    let encode_opts = encode_options_from_pipeline(options);
     let data = codec.encode(&image, &encode_opts)?;
 
     Ok(PipelineResult {
@@ -111,6 +110,16 @@ pub fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineR
         width: image.width,
         height: image.height,
     })
+}
+
+fn encode_options_from_pipeline(options: &PipelineOptions) -> EncodeOptions {
+    EncodeOptions {
+        quality: options.quality,
+        effort: options.effort,
+        png_palette: options.png_palette,
+        jxl_encoder: options.jxl_encoder,
+        threads: options.threads,
+    }
 }
 
 /// Decode the data and re-encode in the same format at the given quality.
@@ -130,6 +139,7 @@ pub fn optimize_with_threads(
             quality,
             effort: None,
             png_palette: PngPaletteMode::Off,
+            jxl_encoder: JxlEncoderPreference::Libjxl,
             threads,
         },
     )
@@ -201,6 +211,7 @@ mod tests {
             quality: 80,
             effort: None,
             png_palette: Default::default(),
+            jxl_encoder: Default::default(),
             threads: None,
             resize: None,
             crop: None,
@@ -209,5 +220,27 @@ mod tests {
         };
         let result = convert(&image, &options);
         assert!(result.is_ok(), "converting to JXL should succeed");
+    }
+
+    #[test]
+    fn pipeline_forwards_jxl_encoder_preference() {
+        let options = PipelineOptions {
+            format: Format::Jxl,
+            quality: 77,
+            effort: Some(61),
+            png_palette: PngPaletteMode::Off,
+            jxl_encoder: JxlEncoderPreference::PreferGjxl,
+            threads: None,
+            resize: None,
+            crop: None,
+            extend: None,
+            fill_color: None,
+        };
+
+        let encode_options = encode_options_from_pipeline(&options);
+        assert_eq!(encode_options.quality, options.quality);
+        assert_eq!(encode_options.effort, options.effort);
+        assert_eq!(encode_options.jxl_encoder, options.jxl_encoder);
+        assert_eq!(encode_options.threads, options.threads);
     }
 }

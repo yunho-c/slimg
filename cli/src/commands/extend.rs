@@ -138,6 +138,7 @@ pub fn run(args: ExtendArgs) -> anyhow::Result<()> {
                 quality: args.quality,
                 effort: args.effort,
                 png_palette: Default::default(),
+                jxl_encoder: Default::default(),
                 threads: None,
                 resize: None,
                 crop: None,

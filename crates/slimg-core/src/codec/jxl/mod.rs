@@ -7,7 +7,7 @@ mod types;
 use crate::error::{Error, Result};
 use crate::format::Format;
 
-use super::{Codec, EncodeOptions, ImageData};
+use super::{Codec, EncodeOptions, ImageData, JxlEncoderPreference};
 
 /// Encoder implementation that produced a JPEG XL codestream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +46,11 @@ pub struct JxlEncodeOutcome {
     pub fallback_reason: Option<JxlFallbackReason>,
 }
 
+/// Whether this build includes the experimental GJXL encoder.
+pub const fn gjxl_backend_compiled() -> bool {
+    cfg!(feature = "jxl-encoder-gjxl")
+}
+
 /// JXL codec backed by libjxl for decoding and by the selected encoder route.
 pub struct JxlCodec;
 
@@ -75,6 +80,10 @@ pub fn encode_with_diagnostics(
     options: &EncodeOptions,
 ) -> Result<JxlEncodeOutcome> {
     validate_image_layout(image)?;
+
+    if options.jxl_encoder == JxlEncoderPreference::Libjxl {
+        return encode_with_libjxl(image, options, None);
+    }
 
     #[cfg(feature = "jxl-encoder-gjxl")]
     {
@@ -169,7 +178,15 @@ mod tests {
             quality,
             effort: None,
             png_palette: Default::default(),
+            jxl_encoder: JxlEncoderPreference::PreferGjxl,
             threads: None,
+        }
+    }
+
+    fn libjxl_options(quality: u8) -> EncodeOptions {
+        EncodeOptions {
+            jxl_encoder: JxlEncoderPreference::Libjxl,
+            ..options(quality)
         }
     }
 
@@ -199,6 +216,19 @@ mod tests {
             outcome.fallback_reason,
             Some(JxlFallbackReason::FeatureDisabled)
         );
+    }
+
+    #[test]
+    fn explicit_libjxl_preference_is_not_a_fallback() {
+        let outcome = encode_with_diagnostics(&create_test_image(8, 8), &libjxl_options(80))
+            .expect("explicit libjxl encode should succeed");
+        assert_eq!(outcome.backend, JxlEncodeBackend::Libjxl);
+        assert_eq!(outcome.fallback_reason, None);
+    }
+
+    #[test]
+    fn capability_matches_the_build_feature() {
+        assert_eq!(gjxl_backend_compiled(), cfg!(feature = "jxl-encoder-gjxl"));
     }
 
     #[cfg(feature = "jxl-encoder-gjxl")]
@@ -305,6 +335,7 @@ mod tests {
             quality: 100,
             effort: None,
             png_palette: Default::default(),
+            jxl_encoder: JxlEncoderPreference::PreferGjxl,
             threads: None,
         };
 
@@ -322,6 +353,7 @@ mod tests {
             quality: 90,
             effort: None,
             png_palette: Default::default(),
+            jxl_encoder: JxlEncoderPreference::Libjxl,
             threads: None,
         };
 
@@ -341,6 +373,7 @@ mod tests {
             quality: 100,
             effort: None,
             png_palette: Default::default(),
+            jxl_encoder: JxlEncoderPreference::Libjxl,
             threads: None,
         };
 

@@ -75,6 +75,7 @@ mod tests {
             quality: 90,
             effort: None,
             png_palette: Default::default(),
+            jxl_encoder: Default::default(),
             threads: None,
         };
 

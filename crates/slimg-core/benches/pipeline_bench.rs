@@ -18,6 +18,7 @@ fn pre_encode(image: &ImageData, format: Format, quality: u8) -> Vec<u8> {
         quality,
         effort: None,
         png_palette: Default::default(),
+        jxl_encoder: Default::default(),
         threads: None,
     };
     codec.encode(image, &options).unwrap()
@@ -160,6 +161,7 @@ fn build_convert_cases(image: &ImageData) -> Vec<ConvertCase> {
                 quality: BENCH_QUALITY,
                 effort: None,
                 png_palette: Default::default(),
+                jxl_encoder: Default::default(),
                 threads: None,
                 resize: None,
                 crop: None,

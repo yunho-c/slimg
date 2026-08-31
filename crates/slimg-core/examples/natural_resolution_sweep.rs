@@ -12,7 +12,7 @@ use slimg_core::codec::jxl::{
 };
 use slimg_core::codec::{EncodeOptions, get_codec};
 use slimg_core::resize::{ResizeMode, resize};
-use slimg_core::{Codec, Format, ImageData, decode_file};
+use slimg_core::{Codec, Format, ImageData, JxlEncoderPreference, decode_file};
 
 const NATURAL_BENCH_ENV: &str = "SLIMG_BENCH_NATURAL_DIR";
 const NATURAL_BENCH_DEFAULT_REPO: &str =
@@ -279,6 +279,7 @@ fn measure_format(
             quality,
             effort: None,
             png_palette: Default::default(),
+            jxl_encoder: JxlEncoderPreference::PreferGjxl,
             threads: None,
         };
 

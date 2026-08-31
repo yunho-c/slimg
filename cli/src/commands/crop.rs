@@ -133,6 +133,7 @@ pub fn run(args: CropArgs) -> anyhow::Result<()> {
                 quality: args.quality,
                 effort: args.effort,
                 png_palette: Default::default(),
+                jxl_encoder: Default::default(),
                 threads: None,
                 resize: None,
                 crop: Some(crop_mode.clone()),

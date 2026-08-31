@@ -10,7 +10,9 @@ use slimg_core::codec::jxl::{
     JxlEncodeBackend, JxlEncodeOutcome, JxlFallbackReason, encode_with_diagnostics,
 };
 use slimg_core::codec::{EncodeOptions, get_codec};
-use slimg_core::{Format, ImageData, PipelineOptions, convert, decode_file, optimize};
+use slimg_core::{
+    Format, ImageData, JxlEncoderPreference, PipelineOptions, convert, decode_file, optimize,
+};
 
 use support::{
     CompressionMetrics, CompressionRow, SizeChangeRow, size_change_metrics, write_json_report,
@@ -148,6 +150,7 @@ fn bench_encode_natural(c: &mut Criterion, corpus: &NaturalCorpus, encode_cases:
         quality: NATURAL_BENCH_QUALITY,
         effort: None,
         png_palette: Default::default(),
+        jxl_encoder: JxlEncoderPreference::PreferGjxl,
         threads: None,
     };
     let mut group = c.benchmark_group("encode");
@@ -236,6 +239,7 @@ fn build_encode_cases(corpus: &NaturalCorpus) -> Vec<EncodeCase> {
                         quality: NATURAL_BENCH_QUALITY,
                         effort: None,
                         png_palette: Default::default(),
+                        jxl_encoder: JxlEncoderPreference::PreferGjxl,
                         threads: None,
                     };
                     if format == Format::Jxl {
@@ -309,6 +313,7 @@ fn build_convert_cases(corpus: &NaturalCorpus) -> Vec<ConvertCase> {
                             quality: NATURAL_BENCH_QUALITY,
                             effort: None,
                             png_palette: Default::default(),
+                            jxl_encoder: JxlEncoderPreference::PreferGjxl,
                             threads: None,
                             resize: None,
                             crop: None,
@@ -327,6 +332,7 @@ fn build_convert_cases(corpus: &NaturalCorpus) -> Vec<ConvertCase> {
                 quality: NATURAL_BENCH_QUALITY,
                 effort: None,
                 png_palette: Default::default(),
+                jxl_encoder: JxlEncoderPreference::PreferGjxl,
                 threads: None,
                 resize: None,
                 crop: None,
@@ -477,6 +483,7 @@ fn encode_image(image: &ImageData, format: Format, quality: u8) -> Vec<u8> {
                 quality,
                 effort: None,
                 png_palette: Default::default(),
+                jxl_encoder: JxlEncoderPreference::PreferGjxl,
                 threads: None,
             },
         )

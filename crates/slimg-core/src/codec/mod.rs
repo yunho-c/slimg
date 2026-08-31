@@ -59,6 +59,8 @@ pub struct EncodeOptions {
     pub effort: Option<u8>,
     /// Palette quantization mode for PNG output.
     pub png_palette: PngPaletteMode,
+    /// Preferred encoder for JPEG XL output.
+    pub jxl_encoder: JxlEncoderPreference,
     /// Optional thread budget for codecs that support internal parallelism.
     pub threads: Option<usize>,
 }
@@ -69,9 +71,24 @@ impl Default for EncodeOptions {
             quality: 80,
             effort: None,
             png_palette: PngPaletteMode::Off,
+            jxl_encoder: JxlEncoderPreference::Libjxl,
             threads: None,
         }
     }
+}
+
+/// Preferred encoder for JPEG XL output.
+///
+/// GJXL remains an experimental, best-effort preference. Unsupported requests
+/// fall back to libjxl; callers that need to observe that decision can use
+/// [`jxl::encode_with_diagnostics`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum JxlEncoderPreference {
+    /// Always encode JPEG XL with libjxl.
+    #[default]
+    Libjxl,
+    /// Prefer GJXL when it is compiled in and the request is supported.
+    PreferGjxl,
 }
 
 /// Palette quantization mode for PNG encoding.
@@ -130,6 +147,7 @@ mod tests {
         assert_eq!(opts.quality, 80);
         assert_eq!(opts.effort, None);
         assert_eq!(opts.png_palette, PngPaletteMode::Off);
+        assert_eq!(opts.jxl_encoder, JxlEncoderPreference::Libjxl);
         assert_eq!(opts.threads, None);
     }
 

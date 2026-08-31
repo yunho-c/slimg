@@ -344,6 +344,7 @@ fn convert(image: &ImageData, options: &PipelineOptions) -> Result<PipelineResul
             .png_palette
             .map(PngPaletteMode::to_core)
             .unwrap_or_default(),
+        jxl_encoder: Default::default(),
         threads: None,
         resize: options.resize.as_ref().map(|r| r.to_core()),
         crop: options.crop.as_ref().map(|c| c.to_core()),
@@ -405,6 +406,7 @@ fn optimize_with_effort(
             quality,
             effort,
             png_palette: Default::default(),
+            jxl_encoder: Default::default(),
             threads: None,
         },
     )?;
