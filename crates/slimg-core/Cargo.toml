@@ -20,7 +20,7 @@ pngquant = ["dep:imagequant", "dep:png"]
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png", "webp"] }
 imagequant = { version = "4.4.1", default-features = false, optional = true }
-gjxl = { version = "0.0.1", path = "../../../gjxl/rust/gjxl", optional = true }
+gjxl = { version = "0.0.1", git = "https://github.com/yunho-c/gjxl", rev = "07fa51301a42698cba1b4866378fd7b9eb24ff03", optional = true }
 libjxl-sys = { version = "0.1", path = "../libjxl-sys", package = "slimg-libjxl-sys" }
 mozjpeg = { version = "0.10", optional = true }
 oxipng = { version = "10", default-features = false, features = ["parallel", "zopfli"] }

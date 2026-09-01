@@ -33,9 +33,8 @@ The `jpegli` backend currently requires the vendored `libjxl` source tree and is
 ## Experimental GJXL Encoder
 
 On macOS, JPEG XL encoding can opt into GJXL's experimental C API while
-retaining libjxl for decoding and unsupported encode requests. During the
-experimental local integration, keep GJXL checked out at `../gjxl`
-relative to the Slimg checkout, then enable the feature:
+retaining libjxl for decoding and unsupported encode requests. Enable the
+feature to build the pinned GJXL revision:
 
 ```bash
 cargo test -p slimg-core --features jxl-encoder-gjxl
