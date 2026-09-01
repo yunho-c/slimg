@@ -27,8 +27,6 @@ pub enum JxlFallbackReason {
     Lossless,
     /// The image contains at least one non-opaque alpha sample.
     NonOpaqueAlpha,
-    /// A thread budget was requested, which GJXL cannot currently honor.
-    ThreadBudget,
     /// GJXL reported that the requested capability is unsupported.
     Unsupported(String),
     /// GJXL could not initialize its requested execution backend.
@@ -149,9 +147,6 @@ fn gjxl_preflight_fallback(
     if image.data.chunks_exact(4).any(|pixel| pixel[3] != 255) {
         return Some(JxlFallbackReason::NonOpaqueAlpha);
     }
-    if options.threads.is_some() {
-        return Some(JxlFallbackReason::ThreadBudget);
-    }
     None
 }
 
@@ -249,7 +244,7 @@ mod tests {
 
     #[cfg(feature = "jxl-encoder-gjxl")]
     #[test]
-    fn lossless_alpha_and_thread_requests_report_fallback() {
+    fn lossless_and_alpha_requests_report_fallback() {
         let opaque = create_test_image(8, 8);
         let lossless = encode_with_diagnostics(&opaque, &options(100))
             .expect("libjxl lossless fallback should encode");
@@ -265,28 +260,34 @@ mod tests {
             alpha.fallback_reason,
             Some(JxlFallbackReason::NonOpaqueAlpha)
         );
+    }
 
-        let mut threaded_options = options(80);
-        threaded_options.threads = Some(1);
-        let threaded = encode_with_diagnostics(&opaque, &threaded_options)
-            .expect("libjxl thread-budget fallback should encode");
-        assert_eq!(threaded.backend, JxlEncodeBackend::Libjxl);
-        assert_eq!(
-            threaded.fallback_reason,
-            Some(JxlFallbackReason::ThreadBudget)
-        );
+    #[cfg(feature = "jxl-encoder-gjxl")]
+    #[test]
+    fn thread_requests_stay_on_gjxl() {
+        let image = create_test_image(16, 16);
+        for threads in [Some(0), Some(1), Some(2), Some(4)] {
+            let mut threaded_options = options(80);
+            threaded_options.threads = threads;
+            let outcome = encode_with_diagnostics(&image, &threaded_options)
+                .expect("GJXL should honor the thread budget");
+            assert_eq!(outcome.backend, JxlEncodeBackend::Gjxl);
+            assert_eq!(outcome.fallback_reason, None);
+        }
     }
 
     #[cfg(feature = "jxl-encoder-gjxl")]
     #[test]
     fn gjxl_context_is_reused_across_concurrent_encodes() {
-        let first_context = gjxl::context_address().expect("GJXL context should initialize");
+        let first_context = gjxl::context_address(Some(2)).expect("GJXL context should initialize");
         let image = create_test_image(16, 16);
         let handles = (0..4)
             .map(|_| {
                 let image = image.clone();
                 std::thread::spawn(move || {
-                    let outcome = encode_with_diagnostics(&image, &options(80))?;
+                    let mut encode_options = options(80);
+                    encode_options.threads = Some(2);
+                    let outcome = encode_with_diagnostics(&image, &encode_options)?;
                     if outcome.backend != JxlEncodeBackend::Gjxl {
                         return Err(Error::Encode("concurrent encode fell back".into()));
                     }
@@ -302,8 +303,21 @@ mod tests {
                 .expect("concurrent GJXL encode should succeed");
             assert!(data.starts_with(&[0xff, 0x0a]));
         }
-        let second_context = gjxl::context_address().expect("GJXL context should remain available");
+        let second_context =
+            gjxl::context_address(Some(2)).expect("GJXL context should remain available");
         assert_eq!(first_context, second_context);
+    }
+
+    #[cfg(feature = "jxl-encoder-gjxl")]
+    #[test]
+    fn gjxl_contexts_are_cached_by_normalized_thread_budget() {
+        let automatic = gjxl::context_address(None).expect("automatic context should initialize");
+        let zero = gjxl::context_address(Some(0)).expect("serial context should initialize");
+        let one = gjxl::context_address(Some(1)).expect("serial context should be cached");
+        let two = gjxl::context_address(Some(2)).expect("two-thread context should initialize");
+        assert_eq!(zero, one);
+        assert_ne!(automatic, one);
+        assert_ne!(one, two);
     }
 
     #[test]

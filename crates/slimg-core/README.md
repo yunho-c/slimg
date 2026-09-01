@@ -34,7 +34,7 @@ The `jpegli` backend currently requires the vendored `libjxl` source tree and is
 
 On macOS, JPEG XL encoding can opt into GJXL's experimental C API while
 retaining libjxl for decoding and unsupported encode requests. During the
-experimental local integration, keep GJXL checked out at `../gjxl-rust`
+experimental local integration, keep GJXL checked out at `../gjxl-thread-budget`
 relative to the Slimg checkout, then enable the feature:
 
 ```bash
@@ -54,6 +54,7 @@ assert!(gjxl_backend_compiled());
 let options = EncodeOptions {
     quality: 80,
     jxl_encoder: JxlEncoderPreference::PreferGjxl,
+    threads: Some(4),
     ..EncodeOptions::default()
 };
 let outcome = encode_with_diagnostics(&image, &options)?;
@@ -61,8 +62,11 @@ let outcome = encode_with_diagnostics(&image, &options)?;
 
 The feature only supports native macOS builds. GJXL uses its `AUTO` execution
 policy and falls back to libjxl when the feature is absent or the request is
-lossless, contains non-opaque alpha, specifies a thread budget, or reports an
-unsupported/unavailable GJXL capability. Other GJXL failures remain errors.
+lossless, contains non-opaque alpha, or reports an unsupported/unavailable
+GJXL capability. Other GJXL failures remain errors. A configured thread count
+is passed to GJXL; `None` keeps its automatic policy, and zero is normalized to
+one participating CPU thread to match Slimg's serial-thread convention. The
+current maximum explicit GJXL budget is 256.
 
 Experiments and benchmarks should call
 `slimg_core::codec::jxl::encode_with_diagnostics` and record its backend and

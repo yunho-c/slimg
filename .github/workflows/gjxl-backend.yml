@@ -36,12 +36,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: yunho-c/gjxl
-          ref: f71ce2c752743d6b65ca172614b2a34b89fe8ea1
+          ref: perf/thread-budget
           path: gjxl-source
           submodules: recursive
 
       - name: Expose sibling GJXL worktree path
-        run: ln -s "$GITHUB_WORKSPACE/gjxl-source" "$GITHUB_WORKSPACE/../gjxl-rust"
+        run: ln -s "$GITHUB_WORKSPACE/gjxl-source" "$GITHUB_WORKSPACE/../gjxl-thread-budget"
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

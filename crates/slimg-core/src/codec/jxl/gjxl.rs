@@ -1,6 +1,7 @@
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 
-use gjxl::{Backend, Context, EncoderOptions, ErrorKind, ImageView};
+use gjxl::{Backend, Context, ContextOptions, EncoderOptions, ErrorKind, ImageView};
 
 use crate::error::{Error, Result};
 
@@ -12,10 +13,12 @@ pub(super) enum GjxlAttempt {
     Fallback(JxlFallbackReason),
 }
 
-static CONTEXT: OnceLock<std::result::Result<Context, gjxl::Error>> = OnceLock::new();
+type CachedContext = std::result::Result<Arc<Context>, gjxl::Error>;
+
+static CONTEXTS: OnceLock<Mutex<HashMap<Option<usize>, Arc<Context>>>> = OnceLock::new();
 
 pub(super) fn try_encode(image: &ImageData, options: &EncodeOptions) -> Result<GjxlAttempt> {
-    let context = match CONTEXT.get_or_init(|| Context::new(Backend::Auto)) {
+    let context = match context(options.threads)? {
         Ok(context) => context,
         Err(error) => return classify_failure(error.kind(), error.message().to_string()),
     };
@@ -40,6 +43,30 @@ pub(super) fn try_encode(image: &ImageData, options: &EncodeOptions) -> Result<G
     }
 }
 
+fn context(threads: Option<usize>) -> Result<CachedContext> {
+    let cpu_threads = normalize_cpu_threads(threads);
+    let contexts = CONTEXTS.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut contexts = contexts
+        .lock()
+        .map_err(|_| Error::Encode("GJXL context cache lock was poisoned".into()))?;
+    if let Some(context) = contexts.get(&cpu_threads) {
+        return Ok(Ok(Arc::clone(context)));
+    }
+    let context = match Context::with_options(ContextOptions {
+        backend: Backend::Auto,
+        cpu_threads,
+    }) {
+        Ok(context) => Arc::new(context),
+        Err(error) => return Ok(Err(error)),
+    };
+    contexts.insert(cpu_threads, Arc::clone(&context));
+    Ok(Ok(context))
+}
+
+fn normalize_cpu_threads(threads: Option<usize>) -> Option<usize> {
+    threads.map(|thread_count| thread_count.max(1))
+}
+
 fn classify_failure(kind: ErrorKind, detail: String) -> Result<GjxlAttempt> {
     match kind {
         ErrorKind::Unsupported => Ok(GjxlAttempt::Fallback(JxlFallbackReason::Unsupported(
@@ -57,10 +84,10 @@ fn native_error(error: gjxl::Error) -> Error {
 }
 
 #[cfg(test)]
-pub(super) fn context_address() -> Result<usize> {
-    match CONTEXT.get_or_init(|| Context::new(Backend::Auto)) {
-        Ok(context) => Ok(std::ptr::from_ref(context) as usize),
-        Err(error) => Err(native_error(error.clone())),
+pub(super) fn context_address(threads: Option<usize>) -> Result<usize> {
+    match context(threads)? {
+        Ok(context) => Ok(Arc::as_ptr(&context) as usize),
+        Err(error) => Err(native_error(error)),
     }
 }
 
@@ -102,5 +129,12 @@ mod tests {
         assert_eq!(gjxl::distance_from_quality(100.0), 0.0);
         assert!((gjxl::distance_from_quality(90.0) - 1.0).abs() < f32::EPSILON);
         assert!((gjxl::distance_from_quality(80.0) - 1.9).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn zero_threads_normalizes_to_serial_execution() {
+        assert_eq!(normalize_cpu_threads(None), None);
+        assert_eq!(normalize_cpu_threads(Some(0)), Some(1));
+        assert_eq!(normalize_cpu_threads(Some(4)), Some(4));
     }
 }
