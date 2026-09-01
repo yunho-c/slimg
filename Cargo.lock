@@ -822,7 +822,7 @@ dependencies = [
 [[package]]
 name = "gjxl"
 version = "0.0.1"
-source = "git+https://github.com/yunho-c/gjxl?rev=07fa51301a42698cba1b4866378fd7b9eb24ff03#07fa51301a42698cba1b4866378fd7b9eb24ff03"
+source = "git+https://github.com/yunho-c/gjxl?rev=17788237f6585d43a1dea6601bf27ca444d2bce8#17788237f6585d43a1dea6601bf27ca444d2bce8"
 dependencies = [
  "gjxl-sys",
 ]
@@ -830,7 +830,7 @@ dependencies = [
 [[package]]
 name = "gjxl-sys"
 version = "0.0.1"
-source = "git+https://github.com/yunho-c/gjxl?rev=07fa51301a42698cba1b4866378fd7b9eb24ff03#07fa51301a42698cba1b4866378fd7b9eb24ff03"
+source = "git+https://github.com/yunho-c/gjxl?rev=17788237f6585d43a1dea6601bf27ca444d2bce8#17788237f6585d43a1dea6601bf27ca444d2bce8"
 dependencies = [
  "bindgen",
  "cmake",
