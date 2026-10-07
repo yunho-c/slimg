@@ -1,6 +1,6 @@
 [package]
 name = "slimg-jpegli-sys"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT"
 description = "Private C shim and static builds of Google's standalone Jpegli"

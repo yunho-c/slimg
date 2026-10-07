@@ -57,6 +57,12 @@ void SlimgErrorExit(j_common_ptr cinfo) {
 extern "C" int slimg_jpegli_encode_rgb(const uint8_t* rgb, uint32_t width,
                                         uint32_t height, uint8_t quality,
                                         slimg_jpegli_result* out) {
+  return slimg_jpegli_encode_rgb_with_effort(rgb, width, height, quality, 100, out);
+}
+
+extern "C" int slimg_jpegli_encode_rgb_with_effort(
+    const uint8_t* rgb, uint32_t width, uint32_t height, uint8_t quality,
+    uint8_t effort, slimg_jpegli_result* out) {
   if (out == nullptr) return SLIMG_JPEGLI_STATUS_INVALID_ARGUMENT;
   ClearResult(out);
 
@@ -92,8 +98,11 @@ extern "C" int slimg_jpegli_encode_rgb(const uint8_t* rgb, uint32_t width,
 
   jpegli_set_defaults(&cinfo);
   jpegli_set_quality(&cinfo, quality, TRUE);
-  jpegli_set_progressive_level(&cinfo, 2);
-  cinfo.optimize_coding = TRUE;
+  // More scans and Huffman optimization trade encoding work for compression.
+  // Keep quantization and color settings independent of effort.
+  const int progressive_level = effort < 50 ? 0 : (effort < 75 ? 1 : 2);
+  jpegli_set_progressive_level(&cinfo, progressive_level);
+  cinfo.optimize_coding = effort >= 25 ? TRUE : FALSE;
 
   jpegli_start_compress(&cinfo, TRUE);
 

@@ -35,6 +35,23 @@ and select `jpeg-backend-jpegli` there as well. The CLI, executor, FFI and GUI
 forward the same mutually exclusive JPEG features. Selecting Jpegli still
 selects both encoding and decoding; MozJPEG remains the default.
 
+### Jpegli effort
+
+`EncodeOptions::effort` (also exposed as CLI `--effort`) selects these settings:
+
+| Effort | JPEG scan mode | Huffman tables |
+| --- | --- | --- |
+| 0–24 | Sequential | Fixed |
+| 25–49 | Sequential | Optimized |
+| 50–74 | Progressive level 1 | Optimized |
+| 75–100 | Progressive level 2 | Optimized |
+| Unset (`None`) | Progressive level 2 (existing default) | Optimized |
+
+Values above 100 behave as 100. Higher tiers enable more compression work;
+actual speed and size depend on the image, so size need not decrease at every
+tier. Effort leaves quality, chroma subsampling and adaptive quantization
+unchanged. Jpegli has no internal thread-budget control; `threads` remains unused.
+
 ## Usage
 
 ```rust

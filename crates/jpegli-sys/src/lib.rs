@@ -12,11 +12,27 @@ pub struct slimg_jpegli_result {
 }
 
 unsafe extern "C" {
+    /// Encodes with the default settings, equivalent to effort 100.
     pub fn slimg_jpegli_encode_rgb(
         rgb: *const u8,
         width: u32,
         height: u32,
         quality: u8,
+        out: *mut slimg_jpegli_result,
+    ) -> i32;
+
+    /// Encodes with effort 0..=100 (larger values behave as 100).
+    ///
+    /// 0..=24 uses sequential JPEG with fixed Huffman tables; 25..=49 uses
+    /// sequential JPEG with optimized tables; 50..=74 uses progressive level 1;
+    /// 75..=100 uses progressive level 2. Both progressive modes optimize tables.
+    /// Effort does not change quality, subsampling or adaptive quantization.
+    pub fn slimg_jpegli_encode_rgb_with_effort(
+        rgb: *const u8,
+        width: u32,
+        height: u32,
+        quality: u8,
+        effort: u8,
         out: *mut slimg_jpegli_result,
     ) -> i32;
 

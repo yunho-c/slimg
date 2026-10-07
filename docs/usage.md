@@ -4,6 +4,16 @@
 
 slimg provides five commands: **convert**, **optimize**, **resize**, **crop**, and **extend**.
 
+All five commands accept `--effort 0..100` to control encoding work. With the
+`jpeg-backend-jpegli` build, effort selects sequential or progressive encoding
+and Huffman optimization; see the [Jpegli effort tiers](../crates/slimg-core/README.md#jpegli-effort).
+Omitting the option preserves the existing progressive level 2 settings.
+For example:
+
+```sh
+slimg convert photo.png --format jpeg --quality 80 --effort 25
+```
+
 ## convert
 
 Convert an image to a different format.

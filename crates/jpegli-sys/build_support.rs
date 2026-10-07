@@ -26,7 +26,7 @@ pub fn manifest(dir: &Path, target: &str, crt: &str, deployment: &str) -> Result
     }
     Ok(json!({
         "schema": 1,
-        "shim_abi": 1,
+        "shim_abi": 2,
         "crate_version": env!("CARGO_PKG_VERSION"),
         "target": target,
         "crt": crt,

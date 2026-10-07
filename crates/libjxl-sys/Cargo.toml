@@ -20,7 +20,7 @@ vendored = ["dep:cmake", "dep:bindgen"]
 jpegli = ["dep:jpegli-sys"]
 
 [dependencies]
-jpegli-sys = { version = "0.1", path = "../jpegli-sys", package = "slimg-jpegli-sys", optional = true }
+jpegli-sys = { version = "0.1.1", path = "../jpegli-sys", package = "slimg-jpegli-sys", optional = true }
 
 [build-dependencies]
 cmake = { version = "0.1", optional = true }

@@ -56,6 +56,10 @@ pub struct EncodeOptions {
     /// Optional effort value in the range 0..=100.
     ///
     /// Higher values favor smaller output at the cost of slower encoding.
+    /// Jpegli uses four tiers: 0..=24 sequential/fixed Huffman tables,
+    /// 25..=49 sequential/optimized tables, 50..=74 progressive level 1,
+    /// and 75..=100 progressive level 2. None preserves level 2 with optimized
+    /// tables. Output size and speed depend on the image, not just effort.
     pub effort: Option<u8>,
     /// Palette quantization mode for PNG output.
     pub png_palette: PngPaletteMode,

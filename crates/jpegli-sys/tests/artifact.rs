@@ -29,6 +29,16 @@ fn rejects_incompatible_and_corrupt_artifacts() {
     save(&original);
     validate(dir, target, "native", "11.0").unwrap();
     validate(dir, target, "native", "12.0").unwrap();
+    // ABI 1 predates the effort entry point, even with otherwise valid hashes.
+    let mut old = original.clone();
+    old["shim_abi"] = serde_json::json!(1);
+    save(&old);
+    assert!(
+        validate(dir, target, "native", "11.0")
+            .unwrap_err()
+            .contains("shim_abi mismatch")
+    );
+    save(&original);
     assert!(
         validate(dir, target, "native", "10.15")
             .unwrap_err()

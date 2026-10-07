@@ -6,6 +6,13 @@ Rust never owns libjpeg structs or participates in `setjmp`/`longjmp` handling.
 The selected upstream revisions are in `upstream.json` and the Git submodule.
 This crate does not depend on libjxl.
 
+`slimg_jpegli_encode_rgb_with_effort` accepts effort 0–100: sequential with fixed
+Huffman tables at 0–24, sequential with optimized tables at 25–49, progressive
+level 1 at 50–74, and progressive level 2 at 75–100. Both progressive tiers use
+optimized tables. Values above 100 behave as 100. The original
+`slimg_jpegli_encode_rgb` entry point retains the default (effort 100) behavior.
+Quality, subsampling and adaptive quantization do not depend on effort.
+
 ## Build selection
 
 The build script selects the first available route:
@@ -74,6 +81,10 @@ deployment target, exact upstream revisions, Highway namespace, and library
 SHA-256 digests. Both explicit and downloaded directories are validated before
 linking. The sidecar checksum detects download corruption; its authenticity
 depends on the same trusted HTTPS release as the archive.
+
+Version 0.1.1 requires shim ABI 2, which adds the effort entry point. Rebuild and
+publish `jpegli-prebuilt-v0.1.1` artifacts before publishing this crate; ABI 1
+artifacts from version 0.1.0 are rejected before linking.
 
 ## Produce and verify
 

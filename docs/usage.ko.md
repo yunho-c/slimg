@@ -4,6 +4,15 @@
 
 slimg은 **convert**, **optimize**, **resize**, **crop**, **extend** 다섯 가지 명령어를 제공합니다.
 
+다섯 명령어 모두 `--effort 0..100`으로 인코딩에 들이는 작업량을 조절할 수 있습니다.
+`jpeg-backend-jpegli` 빌드에서는 순차/프로그레시브 인코딩 방식과 허프만 최적화를
+선택합니다. 구간별 설정은 [Jpegli effort 표](../crates/slimg-core/README.md#jpegli-effort)를
+참고하세요. 옵션을 생략하면 기존 프로그레시브 레벨 2 설정을 유지합니다.
+
+```sh
+slimg convert photo.png --format jpeg --quality 80 --effort 25
+```
+
 ## convert
 
 이미지를 다른 포맷으로 변환합니다.
