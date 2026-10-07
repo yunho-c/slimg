@@ -7,5 +7,10 @@ description = "Execution planning and batch scheduling for slimg workloads"
 repository = "https://github.com/clroot/slimg"
 homepage = "https://github.com/clroot/slimg"
 
+[features]
+default = ["jpeg-backend-mozjpeg"]
+jpeg-backend-mozjpeg = ["slimg-core/jpeg-backend-mozjpeg"]
+jpeg-backend-jpegli = ["slimg-core/jpeg-backend-jpegli"]
+
 [dependencies]
-slimg-core = { path = "../slimg-core" }
+slimg-core = { path = "../slimg-core", default-features = false }

@@ -1,3 +1,6 @@
 [submodule "crates/libjxl-sys/libjxl"]
 	path = crates/libjxl-sys/libjxl
 	url = https://github.com/libjxl/libjxl.git
+[submodule "crates/jpegli-sys/jpegli"]
+	path = crates/jpegli-sys/jpegli
+	url = https://github.com/google/jpegli.git

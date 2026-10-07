@@ -15,7 +15,7 @@ A fast image optimization tool. Convert, compress, resize, crop, and extend imag
 
 | Format | Decode | Encode | Notes |
 |--------|--------|--------|-------|
-| JPEG   | Yes    | Yes    | MozJPEG by default; optional experimental `jpegli` backend for source builds |
+| JPEG   | Yes    | Yes    | MozJPEG by default; optional experimental standalone `jpegli` backend |
 | PNG    | Yes    | Yes    | OxiPNG optimizer with Zopfli compression |
 | WebP   | Yes    | Yes    | Lossy encoding via libwebp |
 | AVIF   | Yes    | Yes    | ravif encoder; dav1d decoder (statically linked) |
@@ -51,7 +51,7 @@ Download from [GitHub Releases](https://github.com/clroot/slimg/releases/latest)
 ### From source
 
 ```
-git clone https://github.com/clroot/slimg.git
+git clone https://github.com/yunho-c/slimg.git
 cd slimg
 cargo install --path cli
 ```
@@ -63,7 +63,7 @@ git submodule update --init --recursive
 cargo install --path cli --no-default-features --features jpeg-backend-jpegli
 ```
 
-The `jpegli` backend currently requires the vendored `libjxl` source tree and is not supported through the prebuilt `slimg-libjxl-sys` archive path.
+The `jpegli` backend uses the official standalone `google/jpegli` repository through `slimg-jpegli-sys`. Jpegli and JPEG XL have independent source/prebuilt routes: set `JPEGLI_SYS_DIR` and `LIBJXL_SYS_DIR` respectively. See [native build and packaging instructions](crates/jpegli-sys/README.md) for artifact requirements and release setup.
 
 #### Build requirements
 

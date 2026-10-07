@@ -9,8 +9,13 @@ publish = false
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[features]
+default = ["jpeg-backend-mozjpeg"]
+jpeg-backend-mozjpeg = ["slimg-core/jpeg-backend-mozjpeg"]
+jpeg-backend-jpegli = ["slimg-core/jpeg-backend-jpegli"]
+
 [dependencies]
-slimg-core = { path = "../slimg-core" }
+slimg-core = { path = "../slimg-core", default-features = false }
 uniffi = { version = "0.31", features = ["cli"] }
 thiserror = "2"
 

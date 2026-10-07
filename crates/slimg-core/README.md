@@ -28,7 +28,12 @@ git submodule update --init --recursive
 cargo test -p slimg-core --no-default-features --features jpeg-backend-jpegli
 ```
 
-The `jpegli` backend currently requires the vendored `libjxl` source tree and is not supported through the prebuilt `slimg-libjxl-sys` archive path.
+The `jpegli` backend uses the official standalone `google/jpegli` repository through `slimg-jpegli-sys`. Jpegli and JPEG XL have independent source/prebuilt routes: set `JPEGLI_SYS_DIR` and `LIBJXL_SYS_DIR` respectively. See [native build and packaging instructions](../jpegli-sys/README.md) for artifact requirements and release setup.
+
+When also depending on `slimg-exec` or `slimg-ffi`, disable their default features
+and select `jpeg-backend-jpegli` there as well. The CLI, executor, FFI and GUI
+forward the same mutually exclusive JPEG features. Selecting Jpegli still
+selects both encoding and decoding; MozJPEG remains the default.
 
 ## Usage
 

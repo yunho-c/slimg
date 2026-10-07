@@ -7,6 +7,13 @@ on:
       - 'cli/Cargo.toml'
       - 'crates/slimg-core/**'
       - 'crates/libjxl-sys/**'
+      - 'crates/jpegli-sys/**'
+      - 'crates/slimg-exec/**'
+      - 'crates/slimg-ffi/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.gitmodules'
+      - 'scripts/check-native-consumer.py'
       - 'README.md'
       - '.github/workflows/jpeg-backends.yml'
   pull_request:
@@ -14,6 +21,13 @@ on:
       - 'cli/Cargo.toml'
       - 'crates/slimg-core/**'
       - 'crates/libjxl-sys/**'
+      - 'crates/jpegli-sys/**'
+      - 'crates/slimg-exec/**'
+      - 'crates/slimg-ffi/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.gitmodules'
+      - 'scripts/check-native-consumer.py'
       - 'README.md'
       - '.github/workflows/jpeg-backends.yml'
 
@@ -22,11 +36,12 @@ env:
 
 jobs:
   verify:
-    name: verify (${{ matrix.backend.name }})
-    runs-on: ubuntu-latest
+    name: verify (${{ matrix.os }}, ${{ matrix.backend.name }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-22.04, ubuntu-24.04-arm, macos-15-intel, macos-latest, windows-latest]
         backend:
           - name: mozjpeg
             cargo_args: ""
@@ -41,11 +56,42 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y nasm meson ninja-build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake clang libclang-dev nasm meson ninja-build
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install cmake meson nasm ninja
+
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install system dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pip install meson
+          choco install nasm ninja pkgconfiglite --yes
+          echo 'C:/Program Files/NASM' >> "$GITHUB_PATH"
+          echo 'CC=cl' >> "$GITHUB_ENV"
+          echo 'CXX=cl' >> "$GITHUB_ENV"
 
       - name: Test slimg-core
-        run: cargo test -p slimg-core ${{ matrix.backend.cargo_args }}
+        run: cargo test -p slimg-core --lib ${{ matrix.backend.cargo_args }}
 
-      - name: Build CLI
-        run: cargo build -p slimg ${{ matrix.backend.cargo_args }}
+      - name: Exercise JPEG and JXL in one process
+        run: cargo test -p slimg-core --test native_coexistence ${{ matrix.backend.cargo_args }}
+
+      - name: Build CLI and FFI consumers
+        shell: bash
+        run: cargo build -p slimg -p slimg-ffi -p slimg-exec ${{ matrix.backend.cargo_args }} --message-format=json > native-build.jsonl
+
+      - name: Verify both prebuilt routes together
+        if: matrix.backend.name == 'jpegli'
+        run: python scripts/check-native-consumer.py --build-log native-build.jsonl

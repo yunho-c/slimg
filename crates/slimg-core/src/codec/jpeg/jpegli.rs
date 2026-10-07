@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 use std::ptr;
 
-use libjxl_sys::jpegli::{
+use jpegli_sys::{
     slimg_jpegli_decode_rgba, slimg_jpegli_encode_rgb, slimg_jpegli_free_result,
     slimg_jpegli_result,
 };

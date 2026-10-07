@@ -1,11 +1,11 @@
 [package]
 name = "slimg-libjxl-sys"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 license = "MIT"
 description = "Minimal FFI bindings to libjxl encoder/decoder"
-repository = "https://github.com/clroot/slimg"
-homepage = "https://github.com/clroot/slimg"
+repository = "https://github.com/yunho-c/slimg"
+homepage = "https://github.com/yunho-c/slimg"
 links = "jxl"
 include = [
     "build.rs",
@@ -17,12 +17,14 @@ include = [
 [features]
 default = ["vendored"]
 vendored = ["dep:cmake", "dep:bindgen"]
-jpegli = ["vendored", "dep:cc"]
+jpegli = ["dep:jpegli-sys"]
+
+[dependencies]
+jpegli-sys = { version = "0.1", path = "../jpegli-sys", package = "slimg-jpegli-sys", optional = true }
 
 [build-dependencies]
 cmake = { version = "0.1", optional = true }
 bindgen = { version = "0.71", optional = true }
-cc = { version = "1", optional = true }
 
 [package.metadata.docs.rs]
 no-default-features = true

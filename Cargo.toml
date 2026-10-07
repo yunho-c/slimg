@@ -5,6 +5,7 @@ members = [
     "crates/slimg-exec",
     "crates/slimg-ffi",
     "crates/libjxl-sys",
+    "crates/jpegli-sys",
     "cli",
 ]
 exclude = ["gui/src-tauri"]

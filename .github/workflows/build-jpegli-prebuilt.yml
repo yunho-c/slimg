@@ -1,0 +1,101 @@
+name: Build Jpegli Prebuilt Libraries
+
+on:
+  push:
+    branches: [main]
+    paths: ['crates/jpegli-sys/**', '.gitmodules', 'scripts/*jpegli*', '.github/workflows/build-jpegli-prebuilt.yml']
+  pull_request:
+    paths: ['crates/jpegli-sys/**', '.gitmodules', 'scripts/*jpegli*', '.github/workflows/build-jpegli-prebuilt.yml']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish immutable native artifacts after all consumer tests pass
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target }} (${{ matrix.crt }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: x86_64-unknown-linux-gnu, runner: ubuntu-22.04, crt: native}
+          - {target: aarch64-unknown-linux-gnu, runner: ubuntu-24.04-arm, crt: native}
+          - {target: x86_64-apple-darwin, runner: macos-15-intel, crt: native, deployment: '10.13'}
+          - {target: aarch64-apple-darwin, runner: macos-latest, crt: native, deployment: '11.0'}
+          - {target: x86_64-pc-windows-msvc, runner: windows-latest, crt: md}
+          - {target: x86_64-pc-windows-msvc, runner: windows-latest, crt: mt}
+    env:
+      CARGO_TARGET_DIR: target/jpegli-ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Checkout pinned codec and build dependencies
+        shell: bash
+        run: |
+          git submodule update --init --depth 1 crates/jpegli-sys/jpegli
+          git -C crates/jpegli-sys/jpegli submodule update --init --depth 1 \
+            third_party/highway third_party/libjpeg-turbo third_party/skcms
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure target runtime
+        shell: bash
+        env:
+          CRT: ${{ matrix.crt }}
+          DEPLOYMENT: ${{ matrix.deployment }}
+        run: |
+          if [ "$CRT" = mt ]; then echo 'RUSTFLAGS=-C target-feature=+crt-static' >> "$GITHUB_ENV"; fi
+          if [ -n "$DEPLOYMENT" ]; then echo "MACOSX_DEPLOYMENT_TARGET=$DEPLOYMENT" >> "$GITHUB_ENV"; fi
+      - name: Build and run source consumer
+        shell: bash
+        run: |
+          cargo run -p slimg-jpegli-sys --example smoke --release --target '${{ matrix.target }}'
+          cargo build -p slimg-jpegli-sys --release --target '${{ matrix.target }}' --message-format=json > jpegli-build.jsonl
+      - name: Package and verify source-free consumer
+        shell: bash
+        run: |
+          python scripts/package-jpegli.py --build-log jpegli-build.jsonl --output dist
+          mkdir prebuilt
+          tar -xzf 'dist/jpegli-prebuilt-${{ matrix.target }}-${{ matrix.crt }}.tar.gz' -C prebuilt
+          python scripts/check-jpegli-package.py --prebuilt 'prebuilt/jpegli-prebuilt-${{ matrix.target }}-${{ matrix.crt }}' --archive 'dist/jpegli-prebuilt-${{ matrix.target }}-${{ matrix.crt }}.tar.gz'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jpegli-prebuilt-${{ matrix.target }}-${{ matrix.crt }}
+          path: dist/*
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: jpegli-prebuilt-*
+          path: dist
+          merge-multiple: true
+      - name: Publish immutable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("crates/jpegli-sys/Cargo.toml", "rb"))["package"]["version"])')
+          TAG="jpegli-prebuilt-v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo 'Release already exists; bump the crate version instead of replacing native binaries' >&2
+            exit 1
+          fi
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "Jpegli prebuilt v${VERSION}" \
+            --notes 'Standalone google/jpegli with the slimg shim and isolated Highway. See each archive manifest for exact revisions and runtime requirements.' dist/*

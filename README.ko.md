@@ -15,7 +15,7 @@
 
 | 포맷 | 디코딩 | 인코딩 | 비고 |
 |------|--------|--------|------|
-| JPEG | O | O | MozJPEG 인코더로 뛰어난 압축률 |
+| JPEG | O | O | 기본 MozJPEG, 선택 가능한 독립형 Jpegli 백엔드 |
 | PNG | O | O | OxiPNG + Zopfli 압축 |
 | WebP | O | O | libwebp 기반 손실 압축 |
 | AVIF | O | O | ravif 인코더; dav1d 디코더 (정적 링크) |
@@ -51,10 +51,21 @@ brew install clroot/tap/slimg
 ### 소스에서 빌드
 
 ```
-git clone https://github.com/clroot/slimg.git
+git clone https://github.com/yunho-c/slimg.git
 cd slimg
 cargo install --path cli
 ```
+
+Jpegli를 사용하려면 기본 기능을 끄고 `jpeg-backend-jpegli`를 선택합니다.
+
+```bash
+git submodule update --init --recursive
+cargo install --path cli --no-default-features --features jpeg-backend-jpegli
+```
+
+Jpegli는 공식 `google/jpegli` 저장소를 사용합니다. `JPEGLI_SYS_DIR`과
+`LIBJXL_SYS_DIR`로 각각의 사전 빌드 라이브러리를 지정할 수 있습니다.
+[네이티브 빌드 및 패키징 안내](crates/jpegli-sys/README.md)를 참고하세요.
 
 #### 빌드 요구사항
 

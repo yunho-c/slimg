@@ -6,4 +6,4 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 #[cfg(feature = "jpegli")]
-pub mod jpegli;
+pub use jpegli_sys as jpegli;

@@ -1,35 +1,18 @@
 use std::env;
-#[cfg(feature = "jpegli")]
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[cfg(not(feature = "jpegli"))]
-const GITHUB_REPO: &str = "clroot/slimg";
+const GITHUB_REPO: &str = "yunho-c/slimg";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=LIBJXL_SYS_DIR");
     println!("cargo:rerun-if-env-changed=DOCS_RS");
     println!("cargo:rerun-if-changed=build.rs");
-    #[cfg(feature = "jpegli")]
-    {
-        println!("cargo:rerun-if-changed=shim/jpegli_shim.h");
-        println!("cargo:rerun-if-changed=shim/jpegli_shim.cc");
-    }
-
     // docs.rs: no native libs available, emit an empty stub.
     if env::var("DOCS_RS").is_ok() {
         let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
         std::fs::write(out_dir.join("bindings.rs"), "// docs.rs stub\n").unwrap();
         return;
-    }
-
-    #[cfg(feature = "jpegli")]
-    if env::var("LIBJXL_SYS_DIR").is_ok() {
-        panic!(
-            "slimg-libjxl-sys: jpegli feature currently requires the vendored libjxl source build; \
-             prebuilt directories are not yet packaged with jpegli artifacts"
-        );
     }
 
     // User-provided prebuilt directory — bypass everything.
@@ -48,18 +31,9 @@ fn main() {
     }
 
     // Prebuilt download path (crates.io consumers, or vendored without source).
-    #[cfg(feature = "jpegli")]
-    panic!(
-        "slimg-libjxl-sys: jpegli feature currently requires the vendored libjxl source build; \
-         downloaded prebuilts do not yet package jpegli artifacts"
-    );
-
-    #[cfg(not(feature = "jpegli"))]
-    {
-        let prebuilt = download_prebuilt();
-        link_prebuilt(&prebuilt);
-        copy_bindings(&prebuilt.join("bindings.rs"));
-    }
+    let prebuilt = download_prebuilt();
+    link_prebuilt(&prebuilt);
+    copy_bindings(&prebuilt.join("bindings.rs"));
 }
 
 // ── Vendored (source) build ─────────────────────────────────────────────────
@@ -67,8 +41,6 @@ fn main() {
 #[cfg(feature = "vendored")]
 fn build_vendored() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
-    #[cfg(feature = "jpegli")]
-    let build_dir = out_path.join("build");
     let dst = cmake::Config::new("libjxl")
         .profile("Release")
         .define("BUILD_TESTING", "OFF")
@@ -79,22 +51,8 @@ fn build_vendored() {
         .define("JPEGXL_ENABLE_BENCHMARK", "OFF")
         .define("JPEGXL_ENABLE_EXAMPLES", "OFF")
         .define("JPEGXL_ENABLE_SJPEG", "OFF")
-        .define(
-            "JPEGXL_ENABLE_JPEGLI",
-            if cfg!(feature = "jpegli") {
-                "ON"
-            } else {
-                "OFF"
-            },
-        )
-        .define(
-            "JPEGXL_ENABLE_JPEGLI_LIBJPEG",
-            if cfg!(feature = "jpegli") {
-                "OFF"
-            } else {
-                "ON"
-            },
-        )
+        .define("JPEGXL_ENABLE_JPEGLI", "OFF")
+        .define("JPEGXL_ENABLE_JPEGLI_LIBJPEG", "OFF")
         .define("JPEGXL_ENABLE_OPENEXR", "OFF")
         .define("JPEGXL_ENABLE_TCMALLOC", "OFF")
         .define("JPEGXL_BUNDLE_LIBPNG", "OFF")
@@ -112,9 +70,6 @@ fn build_vendored() {
     let include_dir = dst.join("include");
     let src_include = PathBuf::from("libjxl/lib/include");
     run_bindgen(&src_include, &include_dir, &out_path.join("bindings.rs"));
-
-    #[cfg(feature = "jpegli")]
-    build_jpegli(&build_dir);
 }
 
 #[cfg(feature = "vendored")]
@@ -197,7 +152,6 @@ fn run_bindgen(src_include: &Path, install_include: &Path, out_file: &Path) {
 
 // ── Prebuilt download ───────────────────────────────────────────────────────
 
-#[cfg(not(feature = "jpegli"))]
 fn download_prebuilt() -> PathBuf {
     let version = env!("CARGO_PKG_VERSION");
     let platform = detect_platform();
@@ -262,19 +216,25 @@ fn download_prebuilt() -> PathBuf {
     extract_dir
 }
 
-#[cfg(not(feature = "jpegli"))]
 fn detect_platform() -> &'static str {
-    let os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
-    let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-    match (os.as_str(), arch.as_str()) {
-        ("linux", "x86_64") => "linux-x86_64",
-        ("linux", "aarch64") => "linux-aarch64",
-        ("macos", "x86_64") => "macos-x86_64",
-        ("macos", "aarch64") => "macos-aarch64",
-        ("windows", "x86_64") => "windows-x86_64",
+    let target = env::var("TARGET").unwrap();
+    match target.as_str() {
+        "x86_64-unknown-linux-gnu" => "linux-x86_64",
+        "aarch64-unknown-linux-gnu" => "linux-aarch64",
+        "x86_64-apple-darwin" => "macos-x86_64",
+        "aarch64-apple-darwin" => "macos-aarch64",
+        "x86_64-pc-windows-msvc" => {
+            assert!(
+                !env::var("CARGO_CFG_TARGET_FEATURE")
+                    .unwrap_or_default()
+                    .split(',')
+                    .any(|f| f == "crt-static"),
+                "slimg-libjxl-sys: prebuilts use the dynamic MSVC CRT; use a source build for crt-static"
+            );
+            "windows-x86_64"
+        }
         _ => panic!(
-            "slimg-libjxl-sys: unsupported platform {os}-{arch}.\n\
-             Hint: build with the vendored feature to compile from source."
+            "slimg-libjxl-sys: no prebuilt for {target}; initialize the vendored source submodule"
         ),
     }
 }
@@ -284,6 +244,33 @@ fn detect_platform() -> &'static str {
 fn link_prebuilt(prebuilt_dir: &Path) {
     let lib_dir = prebuilt_dir.join("lib");
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    let windows = env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() == "msvc";
+    for name in [
+        "jxl",
+        "jxl_cms",
+        "jxl_threads",
+        "hwy",
+        "brotlienc",
+        "brotlidec",
+        "brotlicommon",
+    ] {
+        let file = if windows {
+            format!("{name}.lib")
+        } else {
+            format!("lib{name}.a")
+        };
+        let path = lib_dir.join(file);
+        assert!(
+            path.is_file(),
+            "slimg-libjxl-sys: incomplete prebuilt: missing {}",
+            path.display()
+        );
+        println!("cargo:rerun-if-changed={}", path.display());
+    }
+    println!(
+        "cargo:rerun-if-changed={}",
+        prebuilt_dir.join("bindings.rs").display()
+    );
     emit_link_libs();
 }
 
@@ -306,91 +293,6 @@ fn emit_link_libs() {
         "windows" => {} // MSVC links C++ runtime automatically
         _ => println!("cargo:rustc-link-lib=stdc++"),
     }
-}
-
-#[cfg(feature = "jpegli")]
-fn build_jpegli(build_dir: &Path) {
-    build_cmake_target(build_dir, "jpegli-static");
-
-    let jpegli_lib = find_file(build_dir, |path| {
-        file_name_is(path, "libjpegli-static.a") || file_name_is(path, "jpegli-static.lib")
-    })
-    .unwrap_or_else(|| {
-        panic!(
-            "slimg-libjxl-sys: failed to locate built jpegli-static library under {}",
-            build_dir.display()
-        )
-    });
-    let jpegli_lib_dir = jpegli_lib.parent().unwrap();
-    let jpegli_include_dir = build_dir.join("lib").join("include").join("jpegli");
-    let source_root = PathBuf::from("libjxl");
-
-    assert!(
-        jpegli_include_dir.join("jpeglib.h").exists(),
-        "slimg-libjxl-sys: missing generated jpegli headers at {}",
-        jpegli_include_dir.display()
-    );
-
-    cc::Build::new()
-        .cpp(true)
-        .std("c++17")
-        .file("shim/jpegli_shim.cc")
-        .include(&source_root)
-        .include(&jpegli_include_dir)
-        .compile("slimg_jpegli_shim");
-
-    println!(
-        "cargo:rustc-link-search=native={}",
-        jpegli_lib_dir.display()
-    );
-    if jpegli_lib.extension().and_then(|s| s.to_str()) == Some("lib") {
-        println!("cargo:rustc-link-lib=static=jpegli-static");
-    } else {
-        println!("cargo:rustc-link-lib=static=jpegli-static");
-    }
-}
-
-#[cfg(feature = "jpegli")]
-fn build_cmake_target(build_dir: &Path, target: &str) {
-    let mut command = Command::new("cmake");
-    command.args(["--build"]).arg(build_dir);
-    command.args(["--target", target]);
-    command.args(["--config", "Release"]);
-    if let Ok(jobs) = env::var("NUM_JOBS") {
-        command.args(["--parallel", &jobs]);
-    }
-    let status = command.status().unwrap_or_else(|e| {
-        panic!("slimg-libjxl-sys: failed to run cmake for target {target}: {e}")
-    });
-    assert!(
-        status.success(),
-        "slimg-libjxl-sys: cmake failed building target {target}"
-    );
-}
-
-#[cfg(feature = "jpegli")]
-fn find_file(dir: &Path, predicate: impl Fn(&Path) -> bool + Copy) -> Option<PathBuf> {
-    let entries = fs::read_dir(dir).ok()?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if predicate(&path) {
-            return Some(path);
-        }
-        if path.is_dir() {
-            if let Some(found) = find_file(&path, predicate) {
-                return Some(found);
-            }
-        }
-    }
-    None
-}
-
-#[cfg(feature = "jpegli")]
-fn file_name_is(path: &Path, name: &str) -> bool {
-    path.file_name()
-        .and_then(|s| s.to_str())
-        .map(|s| s == name)
-        .unwrap_or(false)
 }
 
 fn copy_bindings(src: &Path) {

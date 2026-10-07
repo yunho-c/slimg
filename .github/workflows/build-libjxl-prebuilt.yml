@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       crate_version:
-        description: 'slimg-libjxl-sys crate version (e.g. 0.1.0)'
+        description: 'slimg-libjxl-sys crate version (e.g. 0.1.1)'
         required: true
         type: string
       libjxl_tag:
@@ -28,7 +28,7 @@ jobs:
       matrix:
         include:
           - platform: linux-x86_64
-            runner: ubuntu-latest
+            runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
 
           - platform: linux-aarch64
@@ -38,15 +38,19 @@ jobs:
           - platform: macos-x86_64
             runner: macos-15-intel
             target: x86_64-apple-darwin
+            deployment: '10.13'
 
           - platform: macos-aarch64
             runner: macos-latest
             target: aarch64-apple-darwin
+            deployment: '11.0'
 
           - platform: windows-x86_64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
 
+    env:
+      MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment }}
     steps:
       - uses: actions/checkout@v4
 
@@ -89,9 +93,9 @@ jobs:
         shell: bash
         run: |
           choco install cmake ninja nasm -y
-          echo "C:/Program Files/NASM" >> $GITHUB_PATH
-          echo "CC=cl" >> $GITHUB_ENV
-          echo "CXX=cl" >> $GITHUB_ENV
+          echo "C:/Program Files/NASM" >> "$GITHUB_PATH"
+          echo "CC=cl" >> "$GITHUB_ENV"
+          echo "CXX=cl" >> "$GITHUB_ENV"
           # Remove Git Bash's /usr/bin/link which conflicts with MSVC link.exe
           rm -f /usr/bin/link
 
@@ -135,7 +139,7 @@ jobs:
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX="${PWD}/libjxl-install" \
-            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded \
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL \
             -DBUILD_TESTING=OFF \
             -DBUILD_SHARED_LIBS=OFF \
             -DJPEGXL_ENABLE_TOOLS=OFF \
@@ -160,16 +164,16 @@ jobs:
       - name: Set LIBCLANG_PATH (macOS)
         if: runner.os == 'macOS'
         shell: bash
-        run: echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
+        run: echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
 
       - name: Set LIBCLANG_PATH (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: echo "LIBCLANG_PATH=C:/Program Files/LLVM/lib" >> $GITHUB_ENV
+        run: echo "LIBCLANG_PATH=C:/Program Files/LLVM/lib" >> "$GITHUB_ENV"
 
       - name: Install bindgen-cli
         shell: bash
-        run: cargo install bindgen-cli
+        run: cargo install bindgen-cli --version 0.71.1 --locked
 
       - name: Generate bindings.rs
         shell: bash
@@ -184,6 +188,7 @@ jobs:
           #include "jxl/types.h"
           #include "jxl/codestream_header.h"
           #include "jxl/color_encoding.h"
+          #include "jxl/thread_parallel_runner.h"
           HEADER
 
           bindgen wrapper.h \
@@ -201,6 +206,11 @@ jobs:
             --allowlist-function "JxlEncoderProcessOutput" \
             --allowlist-function "JxlEncoderDistanceFromQuality" \
             --allowlist-function "JxlColorEncodingSetToSRGB" \
+            --allowlist-function "JxlEncoderSetParallelRunner" \
+            --allowlist-function "JxlDecoderSetParallelRunner" \
+            --allowlist-function "JxlThreadParallelRunner.*" \
+            --allowlist-type "JxlParallelRunner" \
+            --allowlist-type "JxlParallelRetCode" \
             --allowlist-function "JxlDecoderCreate" \
             --allowlist-function "JxlDecoderDestroy" \
             --allowlist-function "JxlDecoderReset" \
@@ -241,7 +251,7 @@ jobs:
           # Collect static libs from lib/ or lib64/
           for dir in libjxl-install/lib libjxl-install/lib64; do
             [ -d "$dir" ] || continue
-            for lib in libjxl.a libjxl_cms.a libhwy.a libbrotlienc.a libbrotlidec.a libbrotlicommon.a; do
+            for lib in libjxl.a libjxl_cms.a libjxl_threads.a libhwy.a libbrotlienc.a libbrotlidec.a libbrotlicommon.a; do
               [ -f "${dir}/${lib}" ] && cp "${dir}/${lib}" "${STAGE}/lib/"
             done
           done
@@ -251,7 +261,7 @@ jobs:
 
           # Verify all required libs
           MISSING=0
-          for lib in libjxl.a libjxl_cms.a libhwy.a libbrotlienc.a libbrotlidec.a libbrotlicommon.a; do
+          for lib in libjxl.a libjxl_cms.a libjxl_threads.a libhwy.a libbrotlienc.a libbrotlidec.a libbrotlicommon.a; do
             if [ ! -f "${STAGE}/lib/${lib}" ]; then
               echo "::error::Missing ${lib}"
               MISSING=1
@@ -269,7 +279,7 @@ jobs:
           STAGE="libjxl-prebuilt-${PLATFORM}"
           mkdir -p "${STAGE}/lib" "${STAGE}/include/jxl"
 
-          for lib in jxl.lib jxl_cms.lib hwy.lib brotlienc.lib brotlidec.lib brotlicommon.lib; do
+          for lib in jxl.lib jxl_cms.lib jxl_threads.lib hwy.lib brotlienc.lib brotlidec.lib brotlicommon.lib; do
             cp "libjxl-install/lib/${lib}" "${STAGE}/lib/"
           done
 
@@ -278,7 +288,7 @@ jobs:
 
           # Verify all required libs
           MISSING=0
-          for lib in jxl.lib jxl_cms.lib hwy.lib brotlienc.lib brotlidec.lib brotlicommon.lib; do
+          for lib in jxl.lib jxl_cms.lib jxl_threads.lib hwy.lib brotlienc.lib brotlidec.lib brotlicommon.lib; do
             if [ ! -f "${STAGE}/lib/${lib}" ]; then
               echo "::error::Missing ${lib}"
               MISSING=1
@@ -287,6 +297,21 @@ jobs:
           [ "$MISSING" -eq 0 ] || { ls -R "${STAGE}/lib/"; exit 1; }
 
           tar -czf "libjxl-prebuilt-${PLATFORM}.tar.gz" "${STAGE}"
+
+      - name: Verify staged libraries with the Rust JXL consumer
+        shell: bash
+        env:
+          SYSTEM_DEPS_DAV1D_BUILD_INTERNAL: always
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get install -y meson
+          elif [ "$RUNNER_OS" = macOS ]; then
+            brew install meson
+          else
+            pip install meson
+            choco install pkgconfiglite --yes
+          fi
+          LIBJXL_SYS_DIR="$PWD/libjxl-prebuilt-${{ matrix.platform }}" cargo test -p slimg-core --lib codec::jxl --target '${{ matrix.target }}'
 
       - name: Upload archive
         uses: actions/upload-artifact@v4
@@ -317,9 +342,11 @@ jobs:
 
       - name: Create Release
         run: |
-          # Delete existing release if re-running
-          gh release delete "$RELEASE_TAG" --yes 2>/dev/null || true
-          git push origin --delete "$RELEASE_TAG" 2>/dev/null || true
+          # Published native artifact versions are immutable.
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; choose a new crate version" >&2
+            exit 1
+          fi
 
           gh release create "$RELEASE_TAG" \
             --title "libjxl prebuilt v${{ inputs.crate_version }}" \
